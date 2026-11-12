@@ -30,6 +30,10 @@ from .tax import (
     DepreciationRunViewSet, FixedAssetViewSet, MoadianSubmissionViewSet,
     SeasonalReportView, TaxSettingsView, VatReportView,
 )
+from .setup import (
+    SetupConfigureDatabaseView, SetupCreateAdminView, SetupStatusView,
+    SetupTestDatabaseView,
+)
 from .accounting import (
     AccountLedgerView, AccountViewSet, ChartSeedView, JournalEntryViewSet,
     TrialBalanceView,
@@ -53,4 +57,6 @@ __all__ = [
     'PayslipViewSet',
     'TaxSettingsView', 'VatReportView', 'SeasonalReportView',
     'MoadianSubmissionViewSet', 'FixedAssetViewSet', 'DepreciationRunViewSet',
+    'SetupStatusView', 'SetupTestDatabaseView', 'SetupConfigureDatabaseView',
+    'SetupCreateAdminView',
 ]

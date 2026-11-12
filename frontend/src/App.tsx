@@ -1,15 +1,18 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   BrowserRouter as Router,
   Routes,
   Route,
   Navigate,
+  useLocation,
 } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { hasModule } from "./utils/modules";
+import { setupAPI } from "./services/api";
 import type { ModuleName } from "./utils/modules";
 const Login = lazy(() => import("./pages/Login"));
+const SetupWizard = lazy(() => import("./pages/SetupWizard"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Customers = lazy(() => import("./pages/Customers"));
 const CustomerDetail = lazy(() => import("./pages/CustomerDetail"));
@@ -68,212 +71,246 @@ const ModuleRoute = ({
   );
 };
 
+// First-run gate: while no superuser exists, every path leads to the
+// setup wizard. Fails open (normal app) if the status check errors.
+const SetupGate = ({ children }: { children: ReactNode }) => {
+  const [state, setState] = useState<"checking" | "setup" | "ready">(
+    "checking",
+  );
+  const location = useLocation();
+  useEffect(() => {
+    let alive = true;
+    setupAPI
+      .status()
+      .then((res) => {
+        if (alive) setState(res.data.needs_setup ? "setup" : "ready");
+      })
+      .catch(() => {
+        if (alive) setState("ready");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (state === "checking") return <PageLoader />;
+  if (state === "setup" && location.pathname !== "/setup") {
+    return <Navigate to="/setup" replace />;
+  }
+  if (state === "ready" && location.pathname === "/setup") {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <Router>
       <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Dashboard />} />
+        <SetupGate>
+          <Routes>
+            <Route path="/setup" element={<SetupWizard />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Dashboard />} />
 
-            {/* Customers */}
-            <Route
-              path="customers"
-              element={
-                <ModuleRoute module="customers">
-                  <Customers />
-                </ModuleRoute>
-              }
-            />
-            <Route
-              path="customers/:id"
-              element={
-                <ModuleRoute module="customers">
-                  <CustomerDetail />
-                </ModuleRoute>
-              }
-            />
+              {/* Customers */}
+              <Route
+                path="customers"
+                element={
+                  <ModuleRoute module="customers">
+                    <Customers />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="customers/:id"
+                element={
+                  <ModuleRoute module="customers">
+                    <CustomerDetail />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Services */}
-            <Route
-              path="services"
-              element={
-                <ModuleRoute module="services">
-                  <Services />
-                </ModuleRoute>
-              }
-            />
+              {/* Services */}
+              <Route
+                path="services"
+                element={
+                  <ModuleRoute module="services">
+                    <Services />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Invoices */}
-            <Route
-              path="invoices"
-              element={
-                <ModuleRoute module="invoices">
-                  <Invoices />
-                </ModuleRoute>
-              }
-            />
-            <Route
-              path="invoices/new"
-              element={
-                <ModuleRoute module="invoices">
-                  <InvoiceForm />
-                </ModuleRoute>
-              }
-            />
-            <Route
-              path="invoices/:id"
-              element={
-                <ModuleRoute module="invoices">
-                  <InvoiceDetail />
-                </ModuleRoute>
-              }
-            />
-            <Route
-              path="invoices/:id/edit"
-              element={
-                <ModuleRoute module="invoices">
-                  <InvoiceForm />
-                </ModuleRoute>
-              }
-            />
+              {/* Invoices */}
+              <Route
+                path="invoices"
+                element={
+                  <ModuleRoute module="invoices">
+                    <Invoices />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="invoices/new"
+                element={
+                  <ModuleRoute module="invoices">
+                    <InvoiceForm />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="invoices/:id"
+                element={
+                  <ModuleRoute module="invoices">
+                    <InvoiceDetail />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="invoices/:id/edit"
+                element={
+                  <ModuleRoute module="invoices">
+                    <InvoiceForm />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Reports */}
-            <Route
-              path="reports"
-              element={
-                <ModuleRoute module="reports">
-                  <Reports />
-                </ModuleRoute>
-              }
-            />
+              {/* Reports */}
+              <Route
+                path="reports"
+                element={
+                  <ModuleRoute module="reports">
+                    <Reports />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Expenses */}
-            <Route
-              path="expenses"
-              element={
-                <ModuleRoute module="expenses">
-                  <Expenses />
-                </ModuleRoute>
-              }
-            />
+              {/* Expenses */}
+              <Route
+                path="expenses"
+                element={
+                  <ModuleRoute module="expenses">
+                    <Expenses />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Cheques */}
-            <Route
-              path="cheques"
-              element={
-                <ModuleRoute module="cheques">
-                  <Cheques />
-                </ModuleRoute>
-              }
-            />
+              {/* Cheques */}
+              <Route
+                path="cheques"
+                element={
+                  <ModuleRoute module="cheques">
+                    <Cheques />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Accounting (ERP phase 1) */}
-            <Route
-              path="accounting"
-              element={
-                <ModuleRoute module="accounting">
-                  <AccountingPage />
-                </ModuleRoute>
-              }
-            />
+              {/* Accounting (ERP phase 1) */}
+              <Route
+                path="accounting"
+                element={
+                  <ModuleRoute module="accounting">
+                    <AccountingPage />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Inventory & purchasing (ERP phase 2) */}
-            <Route
-              path="inventory"
-              element={
-                <ModuleRoute module="inventory">
-                  <InventoryPage />
-                </ModuleRoute>
-              }
-            />
+              {/* Inventory & purchasing (ERP phase 2) */}
+              <Route
+                path="inventory"
+                element={
+                  <ModuleRoute module="inventory">
+                    <InventoryPage />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Personnel & payroll (ERP phase 3) */}
-            <Route
-              path="payroll"
-              element={
-                <ModuleRoute module="payroll">
-                  <PayrollPage />
-                </ModuleRoute>
-              }
-            />
+              {/* Personnel & payroll (ERP phase 3) */}
+              <Route
+                path="payroll"
+                element={
+                  <ModuleRoute module="payroll">
+                    <PayrollPage />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Tax (ERP phase 4) */}
-            <Route
-              path="tax"
-              element={
-                <ModuleRoute module="tax">
-                  <TaxPage />
-                </ModuleRoute>
-              }
-            />
+              {/* Tax (ERP phase 4) */}
+              <Route
+                path="tax"
+                element={
+                  <ModuleRoute module="tax">
+                    <TaxPage />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Fixed assets (ERP phase 4) */}
-            <Route
-              path="assets"
-              element={
-                <ModuleRoute module="assets">
-                  <AssetsPage />
-                </ModuleRoute>
-              }
-            />
+              {/* Fixed assets (ERP phase 4) */}
+              <Route
+                path="assets"
+                element={
+                  <ModuleRoute module="assets">
+                    <AssetsPage />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Staff */}
-            <Route
-              path="staff"
-              element={
-                <ModuleRoute module="staff">
-                  <StaffPage />
-                </ModuleRoute>
-              }
-            />
+              {/* Staff */}
+              <Route
+                path="staff"
+                element={
+                  <ModuleRoute module="staff">
+                    <StaffPage />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Users (admin only) */}
-            <Route
-              path="users"
-              element={
-                <ModuleRoute module="users">
-                  <UsersPage />
-                </ModuleRoute>
-              }
-            />
-            <Route
-              path="users/:id/performance"
-              element={
-                <ModuleRoute module="users">
-                  <UserPerformancePage />
-                </ModuleRoute>
-              }
-            />
-            <Route
-              path="chat"
-              element={
-                <ModuleRoute module="chat">
-                  <Chat />
-                </ModuleRoute>
-              }
-            />
+              {/* Users (admin only) */}
+              <Route
+                path="users"
+                element={
+                  <ModuleRoute module="users">
+                    <UsersPage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="users/:id/performance"
+                element={
+                  <ModuleRoute module="users">
+                    <UserPerformancePage />
+                  </ModuleRoute>
+                }
+              />
+              <Route
+                path="chat"
+                element={
+                  <ModuleRoute module="chat">
+                    <Chat />
+                  </ModuleRoute>
+                }
+              />
 
-            {/* Settings */}
-            <Route
-              path="settings"
-              element={
-                <ModuleRoute module="settings">
-                  <Settings />
-                </ModuleRoute>
-              }
-            />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+              {/* Settings */}
+              <Route
+                path="settings"
+                element={
+                  <ModuleRoute module="settings">
+                    <Settings />
+                  </ModuleRoute>
+                }
+              />
+            </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </SetupGate>
       </Suspense>
     </Router>
   );

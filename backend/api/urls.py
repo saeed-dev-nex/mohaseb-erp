@@ -13,6 +13,8 @@ from .views import (
     EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView, PayslipViewSet,
     TaxSettingsView, VatReportView, SeasonalReportView, MoadianSubmissionViewSet,
     FixedAssetViewSet, DepreciationRunViewSet,
+    SetupStatusView, SetupTestDatabaseView, SetupConfigureDatabaseView,
+    SetupCreateAdminView,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -63,6 +65,10 @@ urlpatterns = [
     path('accounting/ledger/', AccountLedgerView.as_view(), name='accounting_ledger'),
     path('inventory/kardex/', KardexView.as_view(), name='inventory_kardex'),
     path('inventory/adjust/', StockAdjustView.as_view(), name='inventory_adjust'),
+    path('setup/status/', SetupStatusView.as_view(), name='setup_status'),
+    path('setup/test-database/', SetupTestDatabaseView.as_view(), name='setup_test_database'),
+    path('setup/configure-database/', SetupConfigureDatabaseView.as_view(), name='setup_configure_database'),
+    path('setup/admin/', SetupCreateAdminView.as_view(), name='setup_admin'),
     path('payroll/settings/', PayrollSettingsView.as_view(), name='payroll_settings'),
     path('tax/settings/', TaxSettingsView.as_view(), name='tax_settings'),
     path('tax/vat-report/', VatReportView.as_view(), name='tax_vat_report'),
