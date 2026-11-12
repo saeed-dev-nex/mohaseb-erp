@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="470" viewBox="0 0 1000 470" role="img" aria-labelledby="title desc">
+  <title id="title">نصب فایل XPI از صفحهٔ افزونه‌های Firefox</title>
+  <desc id="desc">صفحهٔ about:addons با گزینهٔ Install Add-on From File و افزونهٔ نصب‌شده</desc>
+  <rect x="1" y="1" width="998" height="468" rx="24" fill="#f7f9fc" stroke="#bdc9d8" stroke-width="2"/>
+  <path d="M24 2h952a22 22 0 0 1 22 22v52H2V24A22 22 0 0 1 24 2" fill="#e8edf4"/>
+  <circle cx="32" cy="39" r="9" fill="#f47b75"/><circle cx="60" cy="39" r="9" fill="#e8b64e"/><circle cx="88" cy="39" r="9" fill="#57b77e"/>
+  <rect x="300" y="20" width="400" height="38" rx="18" fill="#fff" stroke="#ccd5e0"/>
+  <text x="500" y="45" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" fill="#3d4c61">about:addons</text>
+  <text x="930" y="122" text-anchor="end" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="#183458">Extensions and Themes</text>
+  <rect x="484" y="147" width="462" height="204" rx="12" fill="#fff" stroke="#bfcbd8" stroke-width="2"/>
+  <text x="914" y="184" text-anchor="end" font-family="Arial,sans-serif" font-size="19" fill="#263e5a">Check for Updates</text>
+  <path d="M508 203h414" stroke="#e1e7ee" stroke-width="2"/>
+  <rect x="503" y="217" width="424" height="59" rx="9" fill="#eef8f7" stroke="#148f91" stroke-width="3"/>
+  <text x="907" y="254" text-anchor="end" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#173452">Install Add-on From File…</text>
+  <circle cx="528" cy="247" r="18" fill="#0b888b"/><text x="528" y="254" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#fff">1</text>
+  <text x="907" y="316" text-anchor="end" font-family="Arial,sans-serif" font-size="18" fill="#263e5a">Manage Extension Shortcuts</text>
+  <circle cx="956" cy="145" r="22" fill="#0b888b"/><text x="956" y="153" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#fff">⚙</text>
+  <path d="M944 170L912 206" stroke="#0b888b" stroke-width="3" stroke-dasharray="6 5"/>
+  <rect x="45" y="166" width="395" height="174" rx="15" fill="#fff" stroke="#cbd6e2" stroke-width="2"/>
+  <text x="410" y="210" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="21" font-weight="700" fill="#173452" direction="rtl">افزونه‌های نصب‌شده</text>
+  <text x="410" y="258" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="19" fill="#263e5a" direction="rtl">محاسب پرو - صدور فاکتور سریع</text>
+  <rect x="70" y="281" width="112" height="35" rx="17" fill="#dff4eb"/>
+  <text x="126" y="305" text-anchor="middle" font-family="Tahoma,Arial,sans-serif" font-size="16" font-weight="700" fill="#187653" direction="rtl">فعال</text>
+  <text x="411" y="382" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="16" fill="#526780" direction="rtl">در پنجرهٔ بعدی فایل XPI امضاشده را انتخاب کنید.</text>
+</svg>

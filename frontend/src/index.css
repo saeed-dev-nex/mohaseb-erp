@@ -1,0 +1,484 @@
+/* Vazirmatn is self-hosted (src/fonts.css + public/fonts/) so the app and
+   its PWA shell work fully offline and no request leaves for Google Fonts. */
+@import "./fonts.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: "Vazirmatn", system-ui, sans-serif;
+    background-color: #020617;
+    color: #f1f5f9;
+    direction: rtl;
+    text-align: right;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0f172a;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
+  /* Select options dark bg */
+  option {
+    background-color: #1e293b;
+    color: #f1f5f9;
+  }
+}
+
+@layer utilities {
+  .font-vazirmatn {
+    font-family: "Vazirmatn", system-ui, sans-serif;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* JalaliDatePicker dropdown animation */
+  .animate-fade-in {
+    animation: fadeInDown 0.18s ease-out forwards;
+  }
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Light theme for the main application surfaces. */
+[data-theme="light"] {
+  color-scheme: light;
+  background: #f4f6fb !important;
+  color: #172033;
+}
+[data-theme="light"] body {
+  background: #f4f6fb;
+  color: #172033;
+}
+[data-theme="light"] main {
+  color: #172033;
+}
+[data-theme="light"] [class*="bg-slate-950"] {
+  background-color: #f4f6fb !important;
+}
+[data-theme="light"] [class*="bg-slate-900"] {
+  background-color: #fff !important;
+}
+[data-theme="light"] [class*="bg-slate-800"] {
+  background-color: #fff !important;
+}
+[data-theme="light"] [class*="bg-slate-700"] {
+  background-color: #f0f3f8 !important;
+}
+[data-theme="light"] [class*="text-white"],
+[data-theme="light"] [class*="text-slate-100"],
+[data-theme="light"] [class*="text-slate-200"] {
+  color: #172033 !important;
+}
+[data-theme="light"] [class*="text-slate-300"] {
+  color: #344256 !important;
+}
+[data-theme="light"] [class*="text-slate-400"] {
+  color: #526176 !important;
+}
+[data-theme="light"] [class*="text-slate-500"] {
+  color: #55677f !important;
+}
+[data-theme="light"] [class*="text-slate-600"] {
+  color: #475569 !important;
+}
+[data-theme="light"] [class*="border-slate-700"],
+[data-theme="light"] [class*="border-slate-600"] {
+  border-color: #d6deea !important;
+}
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  color: #172033 !important;
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: #55677f !important;
+  opacity: 1;
+}
+[data-theme="light"] input::file-selector-button {
+  color: #fff !important;
+}
+[data-theme="light"] option {
+  background: #fff;
+  color: #172033;
+}
+[data-theme="light"] ::-webkit-scrollbar-track {
+  background: #e7ecf4;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #b6c2d2;
+}
+[data-theme="light"] .glass {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: #dce3ed;
+}
+
+/* Sidebar needs its own light palette: utility substring overrides above also
+   match hover:bg-* classes and otherwise make every navigation row look active. */
+[data-theme="light"] .app-sidebar {
+  background: linear-gradient(180deg, #ffffff 0%, #f5f7fb 100%) !important;
+  border-color: #d6deea !important;
+  box-shadow: 0 12px 32px rgba(30, 41, 59, 0.08) !important;
+}
+[data-theme="light"] .app-sidebar > div:first-child,
+[data-theme="light"] .app-sidebar > div:last-child {
+  border-color: #d6deea !important;
+}
+[data-theme="light"] .app-sidebar nav a:not([aria-current="page"]) {
+  background: transparent !important;
+  border-color: transparent !important;
+  color: #526176 !important;
+  box-shadow: none !important;
+}
+[data-theme="light"] .app-sidebar nav a:not([aria-current="page"]):hover {
+  background: #eaf0f7 !important;
+  color: #172033 !important;
+}
+[data-theme="light"] .app-sidebar nav a[aria-current="page"] {
+  background: #e7efff !important;
+  border-color: #bfd2f2 !important;
+  color: #155e9a !important;
+  box-shadow: none !important;
+}
+[data-theme="light"] .app-sidebar nav a[aria-current="page"] span {
+  color: inherit !important;
+}
+[data-theme="light"] .app-sidebar button:hover {
+  color: #172033;
+}
+
+/* The chat uses WhatsApp-inspired colors in dark mode; adapt its surfaces with the site theme. */
+[data-theme="light"] .chat-page {
+  background: #fff !important;
+  border-color: #d6deea !important;
+}
+[data-theme="light"] .chat-page aside,
+[data-theme="light"] .chat-page header,
+[data-theme="light"] .chat-page form,
+[data-theme="light"] .chat-page [class*="bg-[#0b141a]"],
+[data-theme="light"] .chat-page [class*="bg-[#111b21]"],
+[data-theme="light"] .chat-page [class*="bg-[#202c33]"],
+[data-theme="light"] .chat-page [class*="bg-[#182229]"] {
+  background-color: #fff !important;
+}
+[data-theme="light"] .chat-page [class*="bg-[#2a3942]"] {
+  background-color: #eef2f7 !important;
+}
+[data-theme="light"] .chat-page [class*="bg-[#005c4b]"] {
+  background-color: #d9f4e8 !important;
+  color: #172033 !important;
+}
+[data-theme="light"] .chat-page [class*="bg-[#202c33]"] {
+  color: #172033 !important;
+}
+[data-theme="light"] .chat-page [class*="border-slate-700"] {
+  border-color: #d6deea !important;
+}
+[data-theme="light"] .chat-page [class*="text-slate-300"] {
+  color: #526176 !important;
+}
+[data-theme="light"] .chat-page [class*="text-slate-200"] {
+  color: #344256 !important;
+}
+[data-theme="light"] .chat-page [class*="text-white"] {
+  color: #172033 !important;
+}
+[data-theme="light"] .chat-page [class*="text-sky-100"] {
+  color: #155e9a !important;
+}
+[data-theme="light"] .chat-page [class*="text-sky-300"] {
+  color: #1769aa !important;
+}
+[data-theme="light"] .chat-page [class*="text-emerald-400"] {
+  color: #066e47 !important;
+}
+[data-theme="light"] .chat-page [class*="text-emerald-300"] {
+  color: #066e47 !important;
+}
+[data-theme="light"] .chat-page [class*="text-rose-300"] {
+  color: #be123c !important;
+}
+[data-theme="light"] .chat-page [class*="placeholder-slate-400"]::placeholder {
+  color: #55677f !important;
+}
+
+/* Keep accent text readable on pale surfaces and preserve white labels on saturated controls. */
+[data-theme="light"] [class*="text-blue-200"],
+[data-theme="light"] [class*="text-blue-300"],
+[data-theme="light"] [class*="text-blue-400"],
+[data-theme="light"] [class*="text-sky-200"],
+[data-theme="light"] [class*="text-sky-300"],
+[data-theme="light"] [class*="text-sky-400"],
+[data-theme="light"] [class*="text-indigo-200"],
+[data-theme="light"] [class*="text-indigo-300"],
+[data-theme="light"] [class*="text-indigo-400"],
+[data-theme="light"] [class*="text-purple-200"],
+[data-theme="light"] [class*="text-purple-300"],
+[data-theme="light"] [class*="text-purple-400"],
+[data-theme="light"] [class*="text-violet-200"],
+[data-theme="light"] [class*="text-violet-300"],
+[data-theme="light"] [class*="text-violet-400"],
+[data-theme="light"] [class*="text-cyan-200"],
+[data-theme="light"] [class*="text-cyan-300"],
+[data-theme="light"] [class*="text-cyan-400"] {
+  color: #155e9a !important;
+}
+[data-theme="light"] [class*="text-emerald-200"],
+[data-theme="light"] [class*="text-emerald-300"],
+[data-theme="light"] [class*="text-emerald-400"],
+[data-theme="light"] [class*="text-green-200"],
+[data-theme="light"] [class*="text-green-300"],
+[data-theme="light"] [class*="text-green-400"],
+[data-theme="light"] [class*="text-teal-200"],
+[data-theme="light"] [class*="text-teal-300"],
+[data-theme="light"] [class*="text-teal-400"] {
+  color: #066e47 !important;
+}
+[data-theme="light"] [class*="text-amber-200"],
+[data-theme="light"] [class*="text-amber-300"],
+[data-theme="light"] [class*="text-amber-400"],
+[data-theme="light"] [class*="text-yellow-200"],
+[data-theme="light"] [class*="text-yellow-300"],
+[data-theme="light"] [class*="text-yellow-400"],
+[data-theme="light"] [class*="text-orange-200"],
+[data-theme="light"] [class*="text-orange-300"],
+[data-theme="light"] [class*="text-orange-400"] {
+  color: #92400e !important;
+}
+[data-theme="light"] [class*="text-rose-200"],
+[data-theme="light"] [class*="text-rose-300"],
+[data-theme="light"] [class*="text-rose-400"],
+[data-theme="light"] [class*="text-red-200"],
+[data-theme="light"] [class*="text-red-300"],
+[data-theme="light"] [class*="text-red-400"] {
+  color: #b91c1c !important;
+}
+[data-theme="light"] [class*="text-gray-300"],
+[data-theme="light"] [class*="text-gray-400"] {
+  color: #4b5563 !important;
+}
+[data-theme="light"] [class*="text-gray-500"] {
+  color: #64748b !important;
+}
+[data-theme="light"] button[class^="text-white"],
+[data-theme="light"] button[class*=" text-white"],
+[data-theme="light"] a[class*="bg-blue-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-blue-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-indigo-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-indigo-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-violet-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-violet-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-purple-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-purple-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-emerald-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-emerald-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-green-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-green-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-teal-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-teal-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-cyan-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-cyan-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-sky-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-sky-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-red-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-red-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-rose-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-rose-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-pink-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-pink-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-orange-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-orange-"][class*=" text-white"],
+[data-theme="light"] a[class*="bg-amber-"][class^="text-white"],
+[data-theme="light"] a[class*="bg-amber-"][class*=" text-white"],
+[data-theme="light"] label[class*="bg-"][class^="text-white"],
+[data-theme="light"] label[class*="bg-"][class*=" text-white"] {
+  color: #fff !important;
+}
+
+/* Light-theme chrome and authentication surfaces. */
+[data-theme="light"].login-page {
+  background: linear-gradient(135deg, #e9eef8, #dbeafe, #f4f6fb) !important;
+}
+[data-theme="light"].login-page > div[aria-hidden="true"] {
+  opacity: 0.08;
+}
+[data-theme="light"].login-page > .relative.z-10 {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: #d6deea !important;
+  box-shadow: 0 16px 48px rgba(30, 41, 59, 0.14) !important;
+}
+[data-theme="light"].login-page > .relative.z-10 h1 {
+  color: #172033 !important;
+}
+[data-theme="light"].login-page > .relative.z-10 p,
+[data-theme="light"].login-page > .relative.z-10 label {
+  color: #344256 !important;
+}
+[data-theme="light"].login-page [class*="text-red-100"] {
+  color: #b91c1c !important;
+}
+[data-theme="light"].login-page input {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #172033 !important;
+}
+[data-theme="light"].login-page input::placeholder {
+  color: #55677f !important;
+}
+[data-theme="light"].login-page form button {
+  color: #fff !important;
+}
+[data-theme="light"] .sticky {
+  color: #172033;
+}
+[data-theme="light"] .welcome-card {
+  color: #fff !important;
+}
+[data-theme="light"] .welcome-card [class*="text-amber-200"] {
+  color: #fde68a !important;
+}
+[data-theme="light"] .welcome-card [class*="text-slate-200"] {
+  color: #e2e8f0 !important;
+}
+[data-theme="light"] .welcome-card [class*="text-white"] {
+  color: #fff !important;
+}
+
+@keyframes welcomeBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes welcomeCardIn {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.88);
+  }
+  70% {
+    transform: translateY(-4px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes welcomeSparkle {
+  0%,
+  100% {
+    transform: rotate(-8deg) scale(1);
+  }
+  50% {
+    transform: rotate(8deg) scale(1.08);
+  }
+}
+@keyframes welcomeOrb {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(14px, -10px);
+  }
+}
+.welcome-backdrop {
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(8px);
+  animation: welcomeBackdropIn 0.25s ease-out both;
+}
+.welcome-card {
+  animation: welcomeCardIn 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.welcome-sparkle {
+  animation: welcomeSparkle 3s ease-in-out infinite;
+}
+.welcome-orb {
+  animation: welcomeOrb 7s ease-in-out infinite;
+}
+.welcome-orb-delay {
+  animation-delay: -3.5s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .welcome-backdrop,
+  .welcome-card,
+  .welcome-sparkle,
+  .welcome-orb {
+    animation: none !important;
+  }
+}
+
+/* Light-theme readability pass (WCAG AA): hues and alpha variants the
+   accent map above does not cover, plus washed-out translucent buttons. */
+[data-theme="light"] [class*="text-pink-200"],
+[data-theme="light"] [class*="text-pink-300"],
+[data-theme="light"] [class*="text-pink-400"] {
+  color: #be185d !important;
+}
+[data-theme="light"] [class*="text-yellow-500"],
+[data-theme="light"] [class*="text-yellow-600"],
+[data-theme="light"] [class*="text-amber-600"] {
+  color: #92400e !important;
+}
+[data-theme="light"] [class*="bg-blue-600/80"] {
+  background-color: #1d4ed8 !important;
+}
+[data-theme="light"] [class*="bg-sky-700/80"] {
+  background-color: #075985 !important;
+}
+[data-theme="light"] [class*="bg-teal-600/80"] {
+  background-color: #0f766e !important;
+}
+[data-theme="light"] [class*="bg-red-700/80"] {
+  background-color: #991b1b !important;
+}
+[data-theme="light"] [class*="bg-emerald-700/80"] {
+  background-color: #065f46 !important;
+}
+[data-theme="light"] [class*="bg-emerald-600/80"] {
+  background-color: #047857 !important;
+}
+[data-theme="light"] [class*="bg-indigo-600/80"] {
+  background-color: #4338ca !important;
+}

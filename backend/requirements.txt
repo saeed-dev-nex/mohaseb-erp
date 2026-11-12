@@ -1,0 +1,15 @@
+Django>=4.2,<6
+channels[daphne]>=4.2,<5
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+Pillow
+cryptography
+openpyxl
+boto3
+whitenoise
+
+dj-database-url>=2.2
+psycopg[binary]>=3.1,<4
+channels-redis>=4.2,<5
+redis>=5,<7

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="480" viewBox="0 0 1000 480" role="img" aria-labelledby="title desc">
+  <title id="title">انتخاب توزیع خصوصی افزونه در AMO</title>
+  <desc id="desc">صفحهٔ ساخت افزونه که در آن گزینهٔ On your own برای توزیع خصوصی انتخاب شده است</desc>
+  <rect x="1" y="1" width="998" height="478" rx="24" fill="#f7f9fc" stroke="#bdc9d8" stroke-width="2"/>
+  <path d="M24 2h952a22 22 0 0 1 22 22v52H2V24A22 22 0 0 1 24 2" fill="#e8edf4"/>
+  <circle cx="32" cy="39" r="9" fill="#f47b75"/><circle cx="60" cy="39" r="9" fill="#e8b64e"/><circle cx="88" cy="39" r="9" fill="#57b77e"/>
+  <rect x="220" y="20" width="560" height="38" rx="18" fill="#fff" stroke="#ccd5e0"/>
+  <text x="500" y="45" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" fill="#3d4c61">addons.mozilla.org/developers/</text>
+  <text x="930" y="124" text-anchor="end" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="#183458">Submit a New Add-on</text>
+  <text x="930" y="162" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="18" fill="#526780" direction="rtl">محل توزیع افزونه را انتخاب کنید</text>
+  <rect x="54" y="192" width="892" height="83" rx="13" fill="#fff" stroke="#d4deea" stroke-width="2"/>
+  <circle cx="91" cy="233" r="13" fill="#fff" stroke="#9aabba" stroke-width="3"/>
+  <text x="910" y="229" text-anchor="end" font-family="Arial,sans-serif" font-size="21" font-weight="700" fill="#203a59">On this site</text>
+  <text x="910" y="257" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="16" fill="#60738a" direction="rtl">فهرست عمومی در AMO</text>
+  <rect x="54" y="292" width="892" height="94" rx="13" fill="#eef8f7" stroke="#14989a" stroke-width="3"/>
+  <circle cx="91" cy="338" r="14" fill="#fff" stroke="#128b8e" stroke-width="4"/><circle cx="91" cy="338" r="7" fill="#128b8e"/>
+  <text x="910" y="332" text-anchor="end" font-family="Arial,sans-serif" font-size="22" font-weight="700" fill="#153b5b">On your own</text>
+  <text x="910" y="363" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="17" fill="#147a7c" direction="rtl">توزیع خصوصی — گزینهٔ این راهنما</text>
+  <circle cx="957" cy="338" r="19" fill="#0b888b"/><text x="957" y="345" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#fff">1</text>
+  <rect x="752" y="408" width="194" height="48" rx="9" fill="#1769aa"/>
+  <text x="849" y="439" text-anchor="middle" font-family="Arial,sans-serif" font-size="19" font-weight="700" fill="#fff">Continue</text>
+  <text x="720" y="438" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="16" fill="#526780" direction="rtl">سپس فایل ZIP را بارگذاری کنید ←</text>
+</svg>

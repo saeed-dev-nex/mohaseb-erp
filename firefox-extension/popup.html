@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="fa">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>محاسب پرو - فاکتور سریع</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Login View -->
+  <div id="login-view" class="view">
+    <div class="header">
+      <div class="logo">⚡</div>
+      <h1>محاسب پرو</h1>
+      <p class="subtitle">ابتدا وارد حساب کاربری شوید</p>
+    </div>
+    <div class="glass-card">
+      <div class="form-group">
+        <label>👤 نام کاربری</label>
+        <input type="text" id="login-username" placeholder="نام کاربری خود را وارد کنید" />
+      </div>
+      <div class="form-group">
+        <label>🔒 رمز عبور</label>
+        <input type="password" id="login-password" placeholder="••••••••" />
+      </div>
+      <label class="remember-row"><input type="checkbox" id="remember-me" checked /> <span>مرا به خاطر بسپار و ورود خودکار</span></label>
+    </div>
+    <div id="login-error" class="error-msg" style="display:none;"></div>
+    <button id="login-btn" class="btn-primary btn-gradient">ورود به حساب</button>
+  </div>
+
+  <!-- Invoice View -->
+  <div id="invoice-view" class="view" style="display:none;">
+    <div class="header-row">
+      <div class="header-left">
+        <div class="logo-sm">⚡</div>
+        <div>
+          <h2>فاکتور سریع</h2>
+          <p class="subtitle-sm">پنجره مستقل · قابل جابه‌جایی</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span id="draft-badge" class="draft-indicator" style="display:none;">
+          <span class="draft-dot"></span> پیش‌نویس ذخیره شده
+        </span>
+        <button id="minimize-btn" class="btn-ghost" title="کوچک‌کردن پنجره">—</button>
+        <button id="logout-btn" class="btn-ghost" title="خروج">🚪</button>
+      </div>
+    </div>
+
+    <!-- Customer Card -->
+    <div class="glass-card">
+      <div class="section-title-bar">
+        <span class="section-icon purple">👤</span>
+        اطلاعات مشتری
+      </div>
+      <div class="form-row">
+        <div class="form-group flex1">
+          <label>نام مشتری <span class="req">*</span></label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="customer-name" placeholder="نام مشتری (جدید یا موجود)" autocomplete="off" />
+            <span id="new-badge" class="new-badge" style="display:none;">+ جدید</span>
+            <div id="customer-suggestions" class="suggestions" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="form-group flex1">
+          <label>تلفن</label>
+          <input type="text" id="customer-phone" placeholder="09xxxxxxxxx" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Services Card -->
+    <div class="glass-card">
+      <div class="section-header">
+        <div class="section-title-bar" style="margin-bottom:0;">
+          <span class="section-icon green">🔧</span>
+          خدمات انجام شده
+        </div>
+        <button id="add-row-btn" class="btn-outline-sm">+ ردیف جدید</button>
+      </div>
+      <div id="items-container" style="margin-top:10px;"></div>
+    </div>
+
+    <!-- Description Card -->
+    <div class="glass-card">
+      <div class="section-title-bar">
+        <span class="section-icon blue">📝</span>
+        توضیحات
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <textarea id="description" placeholder="توضیحات اختیاری فاکتور..." rows="2"></textarea>
+      </div>
+    </div>
+
+    <!-- Commission Card -->
+    <div class="glass-card">
+      <div class="section-title-bar">
+        <span class="section-icon yellow">💼</span>
+        کارمزد کلی (درآمد شما)
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <div class="price-wrap">
+          <input type="number" id="commission-total" placeholder="0" min="0" />
+          <span class="price-unit">هزار ت</span>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Status -->
+    <div class="glass-card">
+      <div class="form-group" style="margin-bottom:0;">
+        <label for="card-payment-source">کارت پرداخت</label>
+        <select id="card-payment-source"><option value="customer">کارت مشتری</option><option value="office">کارت دفتر</option></select>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="section">
+      <div class="status-row">
+        <button class="status-btn active" data-status="pending">⏳ پرداخت نشده</button>
+        <button class="status-btn" data-status="paid">✅ پرداخت شده</button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="invoice-error" class="error-msg" style="display:none;"></div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="total-row">
+        <span>💰 مبلغ کل</span>
+        <span id="total-amount" class="total-val">۰ تومان</span>
+      </div>
+      <button id="submit-btn" class="btn-primary btn-gradient">
+        ⚡ صدور فاکتور
+      </button>
+    </div>
+  </div>
+
+  <!-- Success View -->
+  <div id="success-view" class="view" style="display:none;">
+    <div class="success-content">
+      <div class="success-icon">✅</div>
+      <h2 id="success-msg">فاکتور با موفقیت صادر شد</h2>
+      <div class="success-details">
+        <div class="detail-row">
+          <span>شماره فاکتور</span>
+          <span id="success-number" class="mono"></span>
+        </div>
+        <div class="detail-row">
+          <span>مشتری</span>
+          <span id="success-customer"></span>
+        </div>
+        <div id="success-new-badge" class="new-customer-badge" style="display:none;">🆕 مشتری جدید ایجاد شد</div>
+        <div class="detail-row">
+          <span>مبلغ کل</span>
+          <span id="success-amount" class="bold"></span>
+        </div>
+      </div>
+      <div class="success-actions">
+        <button id="new-invoice-btn" class="btn-outline">فاکتور جدید</button>
+        <button id="open-dashboard-btn" class="btn-primary">کوچک‌کردن پنجره</button>
+      </div>
+    </div>
+  </div>
+
+  <template id="item-row-template">
+    <div class="item-row">
+      <span class="item-num"></span>
+      <button type="button" class="item-remove" data-action="remove-row">×</button>
+      <div class="item-title-input">
+        <input type="text" class="item-title" placeholder="عنوان خدمت (تایپ کنید برای جستجو)" autocomplete="off" />
+        <div class="svc-suggestions" style="display:none;"></div>
+        <button type="button" class="btn-outline-sm svc-picker-toggle">افزودن از لیست خدمات</button>
+        <div class="svc-picker-list" style="display:none;"></div>
+      </div>
+      <div class="item-prices">
+        <div>
+          <span class="price-label">قیمت اصلی</span>
+          <div class="price-wrap">
+            <input type="number" class="item-main-price" placeholder="0" />
+            <span class="price-unit">هزار ت</span>
+          </div>
+        </div>
+        <div>
+          <span class="price-label">قیمت اضافی</span>
+          <div class="price-wrap">
+            <input type="number" class="item-extra-price" placeholder="0" />
+            <span class="price-unit">هزار ت</span>
+          </div>
+        </div>
+        <div>
+          <span class="price-label">تعداد</span>
+          <input type="number" class="item-qty" min="1" placeholder="1" />
+        </div>
+      </div>
+      <div class="item-line-total"></div>
+    </div>
+  </template>
+
+  <script src="popup.js"></script>
+</body>
+</html>

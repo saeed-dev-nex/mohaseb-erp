@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+venv/
+.venv/
+ENV/
+env/
+
+# Django local data and secrets
+backend/db.sqlite3
+backend/#db.sqlite3
+# SQLite WAL sidecars (live database files, never commit; they appear
+# whenever the server runs and would trip the updater's clean-tree check)
+backend/db.sqlite3-wal
+backend/db.sqlite3-shm
+backend/db.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+# Backup-scheduler interprocess lock on external databases: PostgreSQL
+# has no local DB file to anchor the lock to, so the scheduler keeps it
+# beside the project (backend/api/scheduler.py). A runtime file like
+# the ones above — it must never trip the updater's clean-tree check.
+backend/.backup-scheduler.lock
+# PostgreSQL migration wizard artifacts (Settings → پایگاه داده): the
+# config carries the encrypted database password, the pending file a
+# full data export — runtime files, never commit, never trip updates.
+backend/.db_config.json
+backend/.db_migration_pending.json
+# In-app update flow (Settings → به‌روزرسانی): the approval flag is
+# written by the backend when the superuser approves an update and
+# consumed by update_project.ps1; the status cache is runtime state.
+# Neither may trip the updater's clean-tree guard.
+/update-approved.flag
+backend/.update_status_cache.json
+backend/media/
+backend/staticfiles/
+.env
+.env.*
+!.env.example
+.omnirush
+
+# Node and generated frontend output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.build_hash
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Browser extension release packages
+chrome-extension/release/
+firefox-extension/release/
+*.zip
+*.xpi
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+backend/.secret_key
+*.backup.lock
+
+# Playwright E2E scratch data
+frontend/e2e/.tmp/
+frontend/test-results/
+frontend/playwright-report/

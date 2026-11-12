@@ -1,0 +1,11 @@
+# Frontend builds need only source code, version metadata and public fonts.
+**
+!frontend/
+!frontend/**
+frontend/node_modules/
+frontend/dist/
+frontend/.env*
+frontend/.build_hash
+!fonts/
+!fonts/*.woff2
+!VERSION
