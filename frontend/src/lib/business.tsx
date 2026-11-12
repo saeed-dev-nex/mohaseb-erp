@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import Cookies from "js-cookie";
 import {
   businessesAPI,
   BUSINESS_STORAGE_KEY,
@@ -55,6 +56,13 @@ export const BusinessProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
 
   const refresh = useCallback(async () => {
+    // Without a session there is nothing to fetch; asking anyway
+    // produces a 401 that the auth layer would try to "repair".
+    if (!Cookies.get("access_token")) {
+      setBusinesses([]);
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = await businessesAPI.list();
       setBusinesses(data);
