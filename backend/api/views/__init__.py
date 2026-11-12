@@ -22,6 +22,10 @@ from .inventory import (
     KardexView, ProductViewSet, PurchaseInvoiceViewSet, StockAdjustView,
     WarehouseViewSet,
 )
+from .payroll import (
+    EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView,
+    PayslipViewSet,
+)
 from .accounting import (
     AccountLedgerView, AccountViewSet, ChartSeedView, JournalEntryViewSet,
     TrialBalanceView,
@@ -41,4 +45,6 @@ __all__ = [
     'TrialBalanceView', 'AccountLedgerView',
     'WarehouseViewSet', 'ProductViewSet', 'PurchaseInvoiceViewSet',
     'KardexView', 'StockAdjustView',
+    'EmploymentProfileViewSet', 'PayrollPeriodViewSet', 'PayrollSettingsView',
+    'PayslipViewSet',
 ]

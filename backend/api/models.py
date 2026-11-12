@@ -770,6 +770,7 @@ class UserModuleAccess(models.Model):
     staff = models.BooleanField(default=True, verbose_name='پرسنل')
     accounting = models.BooleanField(default=True, verbose_name='حسابداری')
     inventory = models.BooleanField(default=True, verbose_name='انبار')
+    payroll = models.BooleanField(default=True, verbose_name='حقوق و دستمزد')
     settings = models.BooleanField(default=True, verbose_name='تنظیمات')
     users = models.BooleanField(default=True, verbose_name='مدیریت کاربران')
     backup = models.BooleanField(default=True, verbose_name='بکاپ')
@@ -1290,3 +1291,181 @@ class PurchaseLine(models.Model):
     @property
     def total(self):
         return self.quantity * self.unit_price
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — personnel & payroll (phase 3)
+#
+# A Staff member gains an EmploymentProfile per business (contract and
+# pay components). A PayrollPeriod (one Jalali month) holds one Payslip
+# per employee; finalizing a period writes a single balanced journal:
+# salary expense + employer insurance against net payables, tax
+# payable and insurance payable.
+# ---------------------------------------------------------------------------
+
+# Default monthly salary-tax brackets (قانون بودجهٔ ۱۴۰۴, monthly split),
+# stored per business as JSON so the owner can edit them when the law
+# changes: each step is [upper_limit_or_null, rate_percent].
+DEFAULT_TAX_BRACKETS = [
+    [24000000, 0],
+    [30000000, 10],
+    [38000000, 15],
+    [50000000, 20],
+    [66000000, 25],
+    [None, 30],
+]
+
+
+class PayrollSettings(models.Model):
+    """تنظیمات حقوق هر کسب‌وکار — نرخ‌ها و پلکان مالیات قابل ویرایش."""
+
+    business = models.OneToOneField(
+        Business, on_delete=models.CASCADE, related_name='payroll_settings',
+        verbose_name='کسب‌وکار',
+    )
+    insurance_employee_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('7'), verbose_name='درصد بیمه سهم کارمند')
+    insurance_employer_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('23'), verbose_name='درصد بیمه سهم کارفرما')
+    overtime_factor = models.DecimalField(max_digits=4, decimal_places=2, default=Decimal('1.4'), verbose_name='ضریب اضافه‌کاری')
+    tax_brackets = models.JSONField(default=list, blank=True, verbose_name='پلکان مالیات حقوق (ماهانه)')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'تنظیمات حقوق'
+        verbose_name_plural = 'تنظیمات حقوق'
+
+    def save(self, *args, **kwargs):
+        if not self.tax_brackets:
+            self.tax_brackets = [list(step) for step in DEFAULT_TAX_BRACKETS]
+        super().save(*args, **kwargs)
+
+
+class EmploymentProfile(models.Model):
+    """پروندهٔ استخدامی یک نفر در یک کسب‌وکار."""
+
+    CONTRACT_CHOICES = [
+        ('official', 'رسمی'),
+        ('contract', 'قراردادی'),
+        ('daily', 'روزمزد'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='employment_profiles',
+        verbose_name='کسب‌وکار',
+    )
+    staff = models.ForeignKey(
+        Staff, on_delete=models.CASCADE, related_name='employment_profiles',
+        verbose_name='پرسنل',
+    )
+    personnel_code = models.CharField(max_length=32, blank=True, default='', verbose_name='کد پرسنلی')
+    national_id = models.CharField(max_length=16, blank=True, default='', verbose_name='کد ملی')
+    insurance_number = models.CharField(max_length=32, blank=True, default='', verbose_name='شماره بیمه')
+    bank_iban = models.CharField(max_length=32, blank=True, default='', verbose_name='شماره شبا')
+    contract_type = models.CharField(max_length=16, choices=CONTRACT_CHOICES, default='contract', verbose_name='نوع قرارداد')
+    hire_date = models.DateField(null=True, blank=True, verbose_name='تاریخ استخدام')
+    base_salary = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حقوق پایه ماهانه')
+    housing_allowance = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حق مسکن')
+    food_allowance = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='بن کارگری')
+    child_allowance_each = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حق اولاد هر فرزند')
+    children_count = models.PositiveSmallIntegerField(default=0, verbose_name='تعداد فرزند')
+    is_insured = models.BooleanField(default=True, verbose_name='مشمول بیمه')
+    is_active = models.BooleanField(default=True, verbose_name='فعال')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['staff__name']
+        verbose_name = 'پروندهٔ استخدامی'
+        verbose_name_plural = 'پرونده‌های استخدامی'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'staff'], name='unique_employment_per_business'),
+        ]
+
+    def __str__(self):
+        return f'{self.staff.name} — {self.business.name}'
+
+
+class PayrollPeriod(models.Model):
+    """دورهٔ حقوق — یک ماه شمسی برای یک کسب‌وکار."""
+
+    STATUS_CHOICES = [
+        ('draft', 'پیش‌نویس'),
+        ('finalized', 'نهایی‌شده'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='payroll_periods',
+        verbose_name='کسب‌وکار',
+    )
+    year = models.PositiveIntegerField(verbose_name='سال شمسی')
+    month = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)], verbose_name='ماه شمسی')
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='draft', verbose_name='وضعیت')
+    journal_entry = models.ForeignKey(
+        JournalEntry, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='payroll_periods', verbose_name='سند حسابداری',
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='payroll_periods', verbose_name='ایجادکننده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-year', '-month']
+        verbose_name = 'دورهٔ حقوق'
+        verbose_name_plural = 'دوره‌های حقوق'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'year', 'month'], name='unique_payroll_period'),
+        ]
+
+    def __str__(self):
+        return f'حقوق {self.year}/{self.month:02d} — {self.business.name}'
+
+    @property
+    def days_in_month(self):
+        if self.month <= 6:
+            return 31
+        if self.month <= 11:
+            return 30
+        # Esfand: 30 in leap years — the Jalali leap rule (33-year cycle).
+        return 30 if (self.year % 33) in (1, 5, 9, 13, 17, 22, 26, 30) else 29
+
+
+class Payslip(models.Model):
+    """فیش حقوقی یک کارمند در یک دوره — ورودی‌ها و همهٔ اجزای محاسبه."""
+
+    period = models.ForeignKey(
+        PayrollPeriod, on_delete=models.CASCADE, related_name='payslips',
+        verbose_name='دورهٔ حقوق',
+    )
+    profile = models.ForeignKey(
+        EmploymentProfile, on_delete=models.PROTECT, related_name='payslips',
+        verbose_name='پروندهٔ استخدامی',
+    )
+    days_worked = models.PositiveSmallIntegerField(default=30, verbose_name='روز کارکرد')
+    overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0, verbose_name='ساعات اضافه‌کاری')
+    other_additions = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='سایر مزایا')
+    other_deductions = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='سایر کسورات (مساعده و…)')
+    # computed components
+    base_pay = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حقوق پایه دوره')
+    housing = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حق مسکن')
+    food = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='بن کارگری')
+    child = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حق اولاد')
+    overtime_pay = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='اضافه‌کاری')
+    gross = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='جمع ناخالص')
+    insurance_base = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='مبنای بیمه')
+    insurance_employee = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='بیمه سهم کارمند')
+    insurance_employer = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='بیمه سهم کارفرما')
+    taxable_income = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='درآمد مشمول مالیات')
+    tax = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='مالیات')
+    net = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='خالص پرداختی')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['profile__staff__name']
+        verbose_name = 'فیش حقوقی'
+        verbose_name_plural = 'فیش‌های حقوقی'
+        constraints = [
+            models.UniqueConstraint(fields=['period', 'profile'], name='unique_payslip_per_period'),
+        ]

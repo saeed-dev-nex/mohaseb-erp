@@ -10,6 +10,7 @@ from .views import (
     BusinessViewSet, BusinessTemplateListView,
     AccountViewSet, JournalEntryViewSet, ChartSeedView, TrialBalanceView, AccountLedgerView,
     WarehouseViewSet, ProductViewSet, PurchaseInvoiceViewSet, KardexView, StockAdjustView,
+    EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView, PayslipViewSet,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -44,6 +45,9 @@ router.register(r'journal-entries', JournalEntryViewSet, basename='journal-entry
 router.register(r'warehouses', WarehouseViewSet, basename='warehouse')
 router.register(r'products', ProductViewSet, basename='product')
 router.register(r'purchases', PurchaseInvoiceViewSet, basename='purchase')
+router.register(r'employment-profiles', EmploymentProfileViewSet, basename='employment-profile')
+router.register(r'payroll-periods', PayrollPeriodViewSet, basename='payroll-period')
+router.register(r'payslips', PayslipViewSet, basename='payslip')
 
 
 urlpatterns = [
@@ -54,6 +58,7 @@ urlpatterns = [
     path('accounting/ledger/', AccountLedgerView.as_view(), name='accounting_ledger'),
     path('inventory/kardex/', KardexView.as_view(), name='inventory_kardex'),
     path('inventory/adjust/', StockAdjustView.as_view(), name='inventory_adjust'),
+    path('payroll/settings/', PayrollSettingsView.as_view(), name='payroll_settings'),
     path('token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/logout/', TokenLogoutView.as_view(), name='token_logout'),
     path(

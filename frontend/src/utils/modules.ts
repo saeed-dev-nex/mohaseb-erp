@@ -14,6 +14,7 @@ export type ModuleName =
   | "staff"
   | "accounting"
   | "inventory"
+  | "payroll"
   | "settings"
   | "users"
   | "backup";
@@ -29,6 +30,7 @@ export const ALL_MODULES: ModuleName[] = [
   "staff",
   "accounting",
   "inventory",
+  "payroll",
   "settings",
   "users",
   "backup",
@@ -45,6 +47,7 @@ export const MODULE_LABELS: Record<ModuleName, string> = {
   staff: "پرسنل",
   accounting: "حسابداری",
   inventory: "انبار و خرید",
+  payroll: "حقوق و دستمزد",
   settings: "تنظیمات",
   users: "مدیریت کاربران",
   backup: "بکاپ",
@@ -61,6 +64,7 @@ const RESOURCE_MODULES: ModuleName[] = [
   "staff",
   "accounting",
   "inventory",
+  "payroll",
 ];
 
 // The most a role can ever reach; a restriction row can only go below this.

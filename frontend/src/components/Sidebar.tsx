@@ -54,6 +54,12 @@ const BASE_NAV_GROUPS: NavGroup[] = [
         icon: "📦",
         module: "inventory",
       },
+      {
+        to: "/payroll",
+        label: "حقوق و دستمزد",
+        icon: "💵",
+        module: "payroll",
+      },
     ],
   },
   {

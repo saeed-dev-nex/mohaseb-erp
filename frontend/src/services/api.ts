@@ -617,6 +617,101 @@ export const inventoryAPI = {
   adjust: (data: Payload) => api.post("inventory/adjust/", data),
 };
 
+// ---- Personnel & payroll (ERP phase 3) ----
+export interface EmploymentProfile {
+  id: number;
+  business: number;
+  staff: number;
+  staff_name: string;
+  personnel_code: string;
+  national_id: string;
+  insurance_number: string;
+  bank_iban: string;
+  contract_type: string;
+  contract_type_display: string;
+  base_salary: number;
+  housing_allowance: number;
+  food_allowance: number;
+  child_allowance_each: number;
+  children_count: number;
+  is_insured: boolean;
+  is_active: boolean;
+}
+
+export interface Payslip {
+  id: number;
+  period: number;
+  profile: number;
+  staff_name: string;
+  personnel_code: string;
+  days_worked: number;
+  overtime_hours: number;
+  other_additions: number;
+  other_deductions: number;
+  base_pay: number;
+  housing: number;
+  food: number;
+  child: number;
+  overtime_pay: number;
+  gross: number;
+  insurance_base: number;
+  insurance_employee: number;
+  insurance_employer: number;
+  taxable_income: number;
+  tax: number;
+  net: number;
+}
+
+export interface PayrollPeriod {
+  id: number;
+  business: number;
+  year: number;
+  month: number;
+  status: "draft" | "finalized";
+  status_display: string;
+  journal_entry: number | null;
+  payslip_count: number;
+  totals: {
+    gross: number;
+    net: number;
+    tax: number;
+    insurance_employee: number;
+    insurance_employer: number;
+  };
+}
+
+export const payrollAPI = {
+  settings: () => api.get("payroll/settings/"),
+  updateSettings: (data: Payload) => api.patch("payroll/settings/", data),
+  profiles: () => api.get<EmploymentProfile[]>("employment-profiles/"),
+  createProfile: (data: Payload) =>
+    api.post<EmploymentProfile>("employment-profiles/", data),
+  updateProfile: (id: number, data: Payload) =>
+    api.patch<EmploymentProfile>(`employment-profiles/${id}/`, data),
+  deleteProfile: (id: number) => api.delete(`employment-profiles/${id}/`),
+  periods: () => api.get("payroll-periods/"),
+  createPeriod: (data: Payload) =>
+    api.post<PayrollPeriod>("payroll-periods/", data),
+  deletePeriod: (id: number) => api.delete(`payroll-periods/${id}/`),
+  generate: (id: number) => api.post(`payroll-periods/${id}/generate/`, {}),
+  finalize: (id: number) =>
+    api.post<PayrollPeriod>(`payroll-periods/${id}/finalize/`, {}),
+  unfinalize: (id: number) =>
+    api.post<PayrollPeriod>(`payroll-periods/${id}/unfinalize/`, {}),
+  payslips: (periodId: number) =>
+    api.get<Payslip[]>(`payroll-periods/${periodId}/payslips/`),
+  updatePayslip: (id: number, data: Payload) =>
+    api.patch<Payslip>(`payslips/${id}/`, data),
+  exportBank: (periodId: number) =>
+    api.get(`payroll-periods/${periodId}/export-bank/`, {
+      responseType: "blob",
+    }),
+  exportInsurance: (periodId: number) =>
+    api.get(`payroll-periods/${periodId}/export-insurance/`, {
+      responseType: "blob",
+    }),
+};
+
 // ---- User Management (admin only) ----
 export const usersAPI = {
   list: () => api.get("users/"),

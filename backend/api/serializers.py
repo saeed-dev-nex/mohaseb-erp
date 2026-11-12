@@ -12,6 +12,7 @@ from .models import (
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess,
     Business, FiscalYear, BusinessMembership,
     Product, Warehouse, StockMovement, PurchaseInvoice, PurchaseLine,
+    EmploymentProfile, PayrollPeriod, PayrollSettings, Payslip,
 )
 from .validators import validate_customer_documents_path, validate_customer_identifier, validate_national_code_field, validate_tax_id
 from .services.money import invoice_payment_totals, final_amount, office_card_fee, compute_rounding_adjustment, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
@@ -1110,3 +1111,89 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
             for line in lines:
                 PurchaseLine.objects.create(purchase=instance, **line)
         return instance
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — personnel & payroll (phase 3)
+# ---------------------------------------------------------------------------
+
+
+
+class PayrollSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayrollSettings
+        fields = [
+            'id', 'business', 'insurance_employee_rate',
+            'insurance_employer_rate', 'overtime_factor', 'tax_brackets',
+            'updated_at',
+        ]
+        read_only_fields = ['business', 'updated_at']
+
+
+class EmploymentProfileSerializer(serializers.ModelSerializer):
+    staff_name = serializers.CharField(source='staff.name', read_only=True)
+    contract_type_display = serializers.CharField(source='get_contract_type_display', read_only=True)
+
+    class Meta:
+        model = EmploymentProfile
+        fields = [
+            'id', 'business', 'staff', 'staff_name', 'personnel_code',
+            'national_id', 'insurance_number', 'bank_iban',
+            'contract_type', 'contract_type_display', 'hire_date',
+            'base_salary', 'housing_allowance', 'food_allowance',
+            'child_allowance_each', 'children_count', 'is_insured',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'created_at', 'updated_at']
+
+
+class PayslipSerializer(serializers.ModelSerializer):
+    staff_name = serializers.CharField(source='profile.staff.name', read_only=True)
+    personnel_code = serializers.CharField(source='profile.personnel_code', read_only=True)
+
+    class Meta:
+        model = Payslip
+        fields = [
+            'id', 'period', 'profile', 'staff_name', 'personnel_code',
+            'days_worked', 'overtime_hours', 'other_additions',
+            'other_deductions', 'base_pay', 'housing', 'food', 'child',
+            'overtime_pay', 'gross', 'insurance_base',
+            'insurance_employee', 'insurance_employer', 'taxable_income',
+            'tax', 'net', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'period', 'profile', 'base_pay', 'housing', 'food', 'child',
+            'overtime_pay', 'gross', 'insurance_base',
+            'insurance_employee', 'insurance_employer', 'taxable_income',
+            'tax', 'net', 'created_at', 'updated_at',
+        ]
+
+
+class PayrollPeriodSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    payslip_count = serializers.SerializerMethodField()
+    totals = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PayrollPeriod
+        fields = [
+            'id', 'business', 'year', 'month', 'status', 'status_display',
+            'journal_entry', 'payslip_count', 'totals',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'status', 'journal_entry', 'created_at', 'updated_at']
+
+    def get_payslip_count(self, obj):
+        return obj.payslips.count()
+
+    def get_totals(self, obj):
+        from decimal import Decimal as _D
+
+        slips = obj.payslips.all()
+        return {
+            'gross': sum((s.gross for s in slips), _D(0)),
+            'net': sum((s.net for s in slips), _D(0)),
+            'tax': sum((s.tax for s in slips), _D(0)),
+            'insurance_employee': sum((s.insurance_employee for s in slips), _D(0)),
+            'insurance_employer': sum((s.insurance_employer for s in slips), _D(0)),
+        }
