@@ -372,6 +372,17 @@ export const businessesAPI = {
       `businesses/${businessId}/apply-chart/`,
       {},
     ),
+  importLegacy: (businessId: number, payload: unknown) =>
+    api.post<{
+      customers_created: number;
+      customers_matched: number;
+      services_created: number;
+      staff_created: number;
+      staff_matched: number;
+      invoices_created: number;
+      invoices_skipped: number;
+      items_created: number;
+    }>(`businesses/${businessId}/import-legacy/`, { payload }),
   applyCatalog: (businessId: number) =>
     api.post<{ created: number; existing: number }>(
       `businesses/${businessId}/apply-catalog/`,

@@ -168,6 +168,27 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
     }
   };
 
+  const [importMsg, setImportMsg] = useState("");
+  const [importing, setImporting] = useState(false);
+  const importLegacyFile = async (file: File) => {
+    if (!selected) return;
+    setImporting(true);
+    setImportMsg("");
+    try {
+      const payload: unknown = JSON.parse(await file.text());
+      const { data } = await businessesAPI.importLegacy(selected.id, payload);
+      setImportMsg(
+        `مهاجرت انجام شد: ${faNum(data.customers_created)} مشتری تازه (${faNum(data.customers_matched)} تکراری)، ${faNum(data.services_created)} خدمت، ${faNum(data.staff_created)} پرسنل، ${faNum(data.invoices_created)} فاکتور با ${faNum(data.items_created)} قلم؛ ${faNum(data.invoices_skipped)} فاکتور به‌خاطر شمارهٔ تکراری رد شد.`,
+      );
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })
+        ?.response?.data?.detail;
+      setImportMsg(detail || "مهاجرت انجام نشد؛ فایل پشتیبان را بررسی کنید.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {error && (
@@ -325,6 +346,34 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
             </button>
             {catalogMsg && (
               <p className="text-xs text-emerald-300 mt-2">{catalogMsg}</p>
+            )}
+          </Section>
+
+          <Section title={`مهاجرت از محاسب‌پرو — ${selected.name}`} icon="🚚">
+            <p className="text-sm text-slate-300">
+              فایل پشتیبان محاسب‌پرو (JSON و بدون رمز) را انتخاب کنید؛ مشتری‌ها،
+              خدمات، پرسنل و فاکتورها با اقلامشان به این کسب‌وکار منتقل می‌شوند.
+              فاکتورهایی که شماره‌شان در این کسب‌وکار هست رد می‌شوند و مشتری
+              تکراری (با کد ملی یا تلفن یکسان) دوباره ساخته نمی‌شود — پس
+              می‌توانید مهاجرت را با خیال راحت تکرار کنید.
+            </p>
+            <label className="inline-block mt-3 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-xl transition-all cursor-pointer">
+              {importing
+                ? "در حال مهاجرت…"
+                : "انتخاب فایل پشتیبان و شروع مهاجرت"}
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) importLegacyFile(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {importMsg && (
+              <p className="text-xs text-emerald-300 mt-2">{importMsg}</p>
             )}
           </Section>
 

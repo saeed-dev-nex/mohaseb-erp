@@ -169,6 +169,116 @@ TEMPLATES = {
         },
         'catalog': _catalog('محصول تولیدی', 'خدمات تولید'),
     },
+    'cafe': {
+        'title': 'کافی‌شاپ',
+        'description': 'منوی نوشیدنی و خوراکی سبک، میز و سفارش بیرون‌بر.',
+        'modules': (
+            'invoices', 'customers', 'services', 'expenses', 'cheques',
+            'reports', 'settings', 'users', 'backup',
+            'accounting', 'inventory', 'sales', 'payroll', 'tax',
+        ),
+        'terminology': {
+            'customer': 'مشتری',
+            'invoice': 'صورتحساب',
+            'item': 'قلم منو',
+        },
+        'invoice_profile': {
+            'vehicle': False,
+            'extras': [
+                {'key': 'table_no', 'label': 'شماره میز', 'type': 'text'},
+                {'key': 'order_type', 'label': 'نوع سفارش', 'type': 'select',
+                 'options': ['سالن', 'بیرون‌بر']},
+            ],
+        },
+        'catalog': _catalog(
+            'اسپرسو', 'لاته', 'کاپوچینو', 'آمریکانو',
+            'کیک روز', 'کروسان', 'آبمیوه طبیعی',
+        ),
+    },
+    'beauty_salon': {
+        'title': 'آرایشگاه و سالن زیبایی',
+        'description': 'خدمات آرایشی با پورسانت آرایشگر و نوبت‌های روزانه.',
+        'modules': BASE_MODULES + ('accounting', 'payroll', 'tax'),
+        'terminology': {
+            'customer': 'مشتری',
+            'invoice': 'فاکتور خدمات',
+            'item': 'خدمت',
+        },
+        'invoice_profile': {
+            'vehicle': False,
+            'extras': [
+                {'key': 'stylist', 'label': 'آرایشگر', 'type': 'text'},
+            ],
+        },
+        'catalog': _catalog(
+            'کوتاهی مو', 'رنگ و مش', 'براشینگ', 'مانیکور',
+            'پدیکور', 'اصلاح صورت', 'میکاپ',
+        ),
+    },
+    'clinic': {
+        'title': 'کلینیک و مطب',
+        'description': 'ویزیت و خدمات درمانی سبک؛ فاکتور با نام پزشک و نوع خدمت.',
+        'modules': BASE_MODULES + ('accounting', 'payroll', 'tax'),
+        'terminology': {
+            'customer': 'مراجعه‌کننده',
+            'invoice': 'صورتحساب',
+            'item': 'خدمت',
+        },
+        'invoice_profile': {
+            'vehicle': False,
+            'extras': [
+                {'key': 'doctor', 'label': 'پزشک / درمانگر', 'type': 'text'},
+                {'key': 'visit_type', 'label': 'نوع مراجعه', 'type': 'select',
+                 'options': ['ویزیت', 'پیگیری', 'خدمات']},
+            ],
+        },
+        'catalog': _catalog(
+            'ویزیت عمومی', 'ویزیت تخصصی', 'تزریقات', 'پانسمان',
+            'نوار قلب', 'سونوگرافی', 'فیزیوتراپی (جلسه)',
+        ),
+    },
+    'carwash': {
+        'title': 'کارواش',
+        'description': 'شست‌وشوی خودرو با پلاک و نوع شست‌وشو روی فاکتور.',
+        'modules': BASE_MODULES + ('accounting', 'tax'),
+        'terminology': {
+            'customer': 'مشتری',
+            'invoice': 'فاکتور خدمات',
+            'item': 'خدمت',
+        },
+        'invoice_profile': {
+            'vehicle': True,
+            'extras': [
+                {'key': 'wash_type', 'label': 'نوع شست‌وشو', 'type': 'select',
+                 'options': ['معمولی', 'ویژه (واکس)', 'نانو', 'صفرشویی']},
+            ],
+        },
+        'catalog': _catalog(
+            'شست‌وشوی بدنه', 'شست‌وشوی کامل', 'واکس و پولیش',
+            'صفرشویی داخل', 'شست‌وشوی موتور', 'نانو سرامیک',
+        ),
+    },
+    'education': {
+        'title': 'آموزشگاه و آموزش',
+        'description': 'شهریهٔ دوره و کلاس؛ فاکتور با نام دوره و ترم.',
+        'modules': BASE_MODULES + ('accounting', 'payroll', 'tax'),
+        'terminology': {
+            'customer': 'هنرجو / دانش‌پذیر',
+            'invoice': 'فاکتور شهریه',
+            'item': 'دوره',
+        },
+        'invoice_profile': {
+            'vehicle': False,
+            'extras': [
+                {'key': 'course', 'label': 'نام دوره', 'type': 'text'},
+                {'key': 'term', 'label': 'ترم', 'type': 'text'},
+            ],
+        },
+        'catalog': _catalog(
+            'دوره زبان انگلیسی', 'دوره کامپیوتر', 'کلاس تقویتی ریاضی',
+            'دوره موسیقی', 'دوره نقاشی', 'مشاوره تحصیلی',
+        ),
+    },
     'general': {
         'title': 'خدمات عمومی',
         'description': 'پروفایل سادهٔ خدماتی برای کسب‌وکارهایی که قالب اختصاصی ندارند.',
