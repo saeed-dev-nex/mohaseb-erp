@@ -7,6 +7,7 @@ from .views import (
     BusinessProfileViewSet, ExpenseCategoryViewSet,
     ExpenseViewSet, StaffViewSet, BackupViewSet, VehicleTypeViewSet,
     UserViewSet, BackupConfigViewSet, DatabaseConfigViewSet, AppUpdateViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet, ChatMessageViewSet,
+    BusinessViewSet, BusinessTemplateListView,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -35,10 +36,12 @@ router.register(r'audit', AuditLogViewSet, basename='audit')
 router.register(r'chat', ChatMessageViewSet, basename='chat')
 router.register(r'welcome-settings', WelcomeSettingsViewSet, basename='welcome-settings')
 router.register(r'social-networks', SocialNetworkViewSet, basename='social-network')
+router.register(r'businesses', BusinessViewSet, basename='business')
 
 
 urlpatterns = [
     path('changes/', database_revision, name='database_revision'),
+    path('business-templates/', BusinessTemplateListView.as_view(), name='business_templates'),
     path('token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/logout/', TokenLogoutView.as_view(), name='token_logout'),
     path(

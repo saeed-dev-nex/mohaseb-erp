@@ -9,7 +9,8 @@ from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from .models import (
     Customer, Service, ServicePackage, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
-    Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess
+    Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess,
+    Business, FiscalYear, BusinessMembership
 )
 from .validators import validate_customer_documents_path, validate_customer_identifier, validate_national_code_field, validate_tax_id
 from .services.money import invoice_payment_totals, final_amount, office_card_fee, compute_rounding_adjustment, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
@@ -288,11 +289,11 @@ class CustomerListSerializer(serializers.ModelSerializer):
         model = Customer
         list_serializer_class = CustomerFinancialListSerializer
         fields = [
-            'id', 'name', 'phone', 'email', 'national_id',
+            'id', 'business', 'name', 'phone', 'email', 'national_id',
             'address', 'notes', 'created_at',
             'total_invoices', 'total_paid', 'total_pending',
         ]
-        read_only_fields = ['created_at', 'total_invoices', 'total_paid']
+        read_only_fields = ['created_at', 'total_invoices', 'total_paid', 'business']
 
     def get_total_invoices(self, obj):
         return obj.invoice_set.count()
@@ -333,11 +334,11 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         model = Customer
         list_serializer_class = CustomerFinancialListSerializer
         fields = [
-            'id', 'name', 'phone', 'email', 'address',
+            'id', 'business', 'name', 'phone', 'email', 'address',
             'national_id', 'notes', 'created_at', 'updated_at',
             'documents', 'total_invoices', 'total_paid', 'total_pending'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'documents', 'total_invoices', 'total_paid', 'total_pending']
+        read_only_fields = ['created_at', 'updated_at', 'documents', 'total_invoices', 'total_paid', 'total_pending', 'business']
 
     def get_total_invoices(self, obj):
         return obj.invoice_set.count()
@@ -485,7 +486,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'customer', 'customer_name', 'operator_name', 'paid_by_name',
+            'id', 'business', 'invoice_number', 'customer', 'customer_name', 'operator_name', 'paid_by_name',
             'card_payment_source',
             'date', 'due_date', 'description', 'total_amount',
             'commission_total', 'discount', 'tax', 'status', 'status_display',
@@ -498,7 +499,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'vehicle_year', 'custom_fields', 'created_by',
             'green_card_owner_name', 'green_card_owner_national_id', 'tags',
         ]
-        read_only_fields = ['invoice_number', 'created_at', 'updated_at', 'created_by', 'rounding_amount']
+        read_only_fields = ['invoice_number', 'created_at', 'updated_at', 'created_by', 'rounding_amount', 'business']
 
 
     def get_operator_name(self, obj):
@@ -814,3 +815,64 @@ class ChequeSerializer(serializers.ModelSerializer):
             'type', 'type_display', 'description', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — businesses, fiscal years, memberships (phase 0)
+# ---------------------------------------------------------------------------
+
+from .business_templates import get_template
+
+
+class FiscalYearSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FiscalYear
+        fields = ['id', 'business', 'title', 'start_date', 'end_date', 'is_current', 'is_closed', 'created_at']
+        read_only_fields = ['created_at']
+
+
+class BusinessMembershipSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = BusinessMembership
+        fields = ['id', 'user', 'username', 'business', 'role', 'is_default', 'created_at']
+        read_only_fields = ['created_at']
+
+
+class BusinessSerializer(serializers.ModelSerializer):
+    template_title = serializers.SerializerMethodField()
+    terminology = serializers.SerializerMethodField()
+    effective_modules = serializers.SerializerMethodField()
+    current_fiscal_year = FiscalYearSerializer(read_only=True)
+    my_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Business
+        fields = [
+            'id', 'name', 'template_key', 'template_title', 'terminology',
+            'person_type', 'legal_name', 'national_id', 'economic_code',
+            'registration_number', 'phone', 'address', 'modules_override',
+            'effective_modules', 'current_fiscal_year', 'my_role',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_template_title(self, obj):
+        return get_template(obj.template_key)['title']
+
+    def get_terminology(self, obj):
+        return get_template(obj.template_key)['terminology']
+
+    def get_effective_modules(self, obj):
+        return obj.effective_modules()
+
+    def get_my_role(self, obj):
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return None
+        if user.is_superuser:
+            return 'owner'
+        membership = obj.memberships.filter(user=user).first()
+        return membership.role if membership else None

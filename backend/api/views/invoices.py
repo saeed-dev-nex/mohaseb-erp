@@ -35,6 +35,7 @@ from ..serializers import (
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
+from ..business_context import resolve_business
 from ..audit import snapshot, record_audit, is_invoice_content_version
 from ..services.money import invoice_payment_totals, safe_spreadsheet_cell
 
@@ -98,9 +99,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
+        business = resolve_business(self.request)
+        extra = {}
+        if business is not None:
+            extra['business'] = business
         invoice = serializer.save(
             created_by=self.request.user,
             paid_by=self.request.user if serializer.validated_data.get('status') == 'paid' else None,
+            **extra,
         )
         record_audit(user=self.request.user, instance=invoice, action='create', after=snapshot(invoice))
 
@@ -111,6 +117,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related('items__service', 'payments__created_by', 'edit_requests')
+        # ERP: when the caller selected a business, scope the list to it.
+        business = resolve_business(self.request)
+        if business is not None:
+            qs = qs.filter(business=business)
         status_filter = self.request.query_params.get('status', '')
         customer_id = self.request.query_params.get('customer', '')
         customer_name = self.request.query_params.get('customer_name', '')

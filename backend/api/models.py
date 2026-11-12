@@ -31,6 +31,14 @@ def document_upload_path(instance, filename):
 
 class Customer(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    # ERP dimension: every transactional record belongs to a Business.
+    # Nullable only so pre-ERP rows and code paths keep working; the
+    # 0035 data migration assigns the default business to all existing
+    # rows, and the API sets it on create from the current business.
+    business = models.ForeignKey(
+        'Business', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='business_customers', verbose_name='کسب‌وکار',
+    )
     name = models.CharField(max_length=255, verbose_name='نام')
     phone = models.CharField(max_length=50, blank=True, null=True, verbose_name='تلفن')
     email = models.EmailField(blank=True, null=True, verbose_name='ایمیل')
@@ -171,6 +179,10 @@ class Invoice(models.Model):
     ]
 
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='مشتری')
+    business = models.ForeignKey(
+        'Business', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='business_invoices', verbose_name='کسب‌وکار',
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='issued_invoices', verbose_name='صادرکننده')
     paid_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='paid_invoices', verbose_name='پرداخت‌کننده')
     card_payment_source = models.CharField(
@@ -769,3 +781,139 @@ class IdempotentSubmission(models.Model):
 
     def __str__(self):
         return f'IdempotentSubmission({self.key} → invoice {self.invoice_id})'
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — multi-business core (phase 0)
+#
+# A Business is the tenant dimension of the ERP edition: every
+# transactional model carries it (Invoice and Customer from phase 0;
+# the rest as their modules land). FiscalYear scopes accounting
+# periods per business, and BusinessMembership binds users to the
+# businesses they may work in.
+# ---------------------------------------------------------------------------
+
+from .business_templates import TEMPLATE_CHOICES, DEFAULT_TEMPLATE_KEY, template_modules
+
+
+class Business(models.Model):
+    """یک کسب‌وکار / شرکت — بُعد اصلی داده در نسخهٔ ERP."""
+
+    PERSON_TYPE_CHOICES = [
+        ('legal', 'حقوقی (شرکت / مؤسسه)'),
+        ('individual', 'حقیقی (شخص / مغازه)'),
+    ]
+
+    name = models.CharField(max_length=255, verbose_name='نام کسب‌وکار')
+    template_key = models.CharField(
+        max_length=32, choices=TEMPLATE_CHOICES, default=DEFAULT_TEMPLATE_KEY,
+        verbose_name='قالب شغلی',
+    )
+    person_type = models.CharField(
+        max_length=16, choices=PERSON_TYPE_CHOICES, default='legal',
+        verbose_name='نوع شخصیت',
+    )
+    legal_name = models.CharField(max_length=255, blank=True, default='', verbose_name='نام قانونی / نام کامل')
+    national_id = models.CharField(max_length=20, blank=True, default='', verbose_name='شناسه ملی / کد ملی')
+    economic_code = models.CharField(max_length=20, blank=True, default='', verbose_name='کد اقتصادی')
+    registration_number = models.CharField(max_length=32, blank=True, default='', verbose_name='شماره ثبت')
+    phone = models.CharField(max_length=50, blank=True, default='', verbose_name='تلفن')
+    address = models.TextField(blank=True, default='', verbose_name='نشانی')
+    # {'disabled': [module...], 'enabled': [module...]} on top of the
+    # template's module list; None means "exactly the template".
+    modules_override = models.JSONField(null=True, blank=True, verbose_name='تنظیم ماژول‌ها')
+    is_active = models.BooleanField(default=True, verbose_name='فعال')
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_businesses', verbose_name='سازنده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'کسب‌وکار'
+        verbose_name_plural = 'کسب‌وکارها'
+
+    def __str__(self):
+        return self.name
+
+    def effective_modules(self):
+        """Template modules adjusted by this business's override."""
+        modules = template_modules(self.template_key)
+        override = self.modules_override or {}
+        disabled = set(override.get('disabled') or [])
+        modules = [name for name in modules if name not in disabled]
+        for name in override.get('enabled') or []:
+            if name not in modules:
+                modules.append(name)
+        return modules
+
+    @property
+    def current_fiscal_year(self):
+        return self.fiscal_years.filter(is_current=True).first()
+
+
+class FiscalYear(models.Model):
+    """سال مالی یک کسب‌وکار؛ مبنای دوره‌های حسابداری از فاز ۱."""
+
+    business = models.ForeignKey(
+        Business, on_delete=models.CASCADE, related_name='fiscal_years',
+        verbose_name='کسب‌وکار',
+    )
+    title = models.CharField(max_length=64, verbose_name='عنوان')
+    start_date = models.DateField(verbose_name='تاریخ شروع')
+    end_date = models.DateField(verbose_name='تاریخ پایان')
+    is_current = models.BooleanField(default=False, verbose_name='سال جاری')
+    is_closed = models.BooleanField(default=False, verbose_name='بسته شده')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-start_date']
+        verbose_name = 'سال مالی'
+        verbose_name_plural = 'سال‌های مالی'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'title'], name='unique_fiscal_year_title_per_business'),
+        ]
+
+    def __str__(self):
+        return f'{self.business} — {self.title}'
+
+    def clean(self):
+        super().clean()
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValidationError('تاریخ پایان سال مالی نمی‌تواند قبل از تاریخ شروع باشد.')
+
+
+class BusinessMembership(models.Model):
+    """عضویت یک کاربر در یک کسب‌وکار، با نقش داخل همان کسب‌وکار."""
+
+    ROLE_CHOICES = [
+        ('owner', 'مالک'),
+        ('manager', 'مدیر'),
+        ('operator', 'اپراتور'),
+        ('viewer', 'مشاهده‌گر'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='business_memberships',
+        verbose_name='کاربر',
+    )
+    business = models.ForeignKey(
+        Business, on_delete=models.CASCADE, related_name='memberships',
+        verbose_name='کسب‌وکار',
+    )
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES, default='operator', verbose_name='نقش')
+    is_default = models.BooleanField(default=False, verbose_name='کسب‌وکار پیش‌فرض کاربر')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['business', 'user']
+        verbose_name = 'عضویت کسب‌وکار'
+        verbose_name_plural = 'عضویت‌های کسب‌وکار'
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'business'], name='unique_business_membership'),
+        ]
+
+    def __str__(self):
+        return f'{self.user} @ {self.business} ({self.role})'

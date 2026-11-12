@@ -36,10 +36,17 @@ const refreshAccess = createAccessRefresher({
     Cookies.set("access_token", access, { sameSite: "lax" }),
 });
 
-// Request interceptor - attach token
+// Request interceptor - attach token (+ current ERP business, if any)
+export const BUSINESS_STORAGE_KEY = "mohaseb-erp:business-id";
 api.interceptors.request.use((config) => {
   const token = Cookies.get("access_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  try {
+    const businessId = window.localStorage.getItem(BUSINESS_STORAGE_KEY);
+    if (businessId) config.headers["X-Business-Id"] = businessId;
+  } catch {
+    /* Storage may be unavailable; the request just stays unscoped. */
+  }
   return config;
 });
 
@@ -297,6 +304,57 @@ export const appUpdateAPI = {
     api.get("app-update/", { params: quick ? { quick: 1 } : {} }),
   check: () => api.post("app-update/check/", {}),
   apply: () => api.post("app-update/apply/", {}),
+};
+
+// ---- Businesses (ERP multi-business core) ----
+export interface FiscalYear {
+  id: number;
+  business: number;
+  title: string;
+  start_date: string;
+  end_date: string;
+  is_current: boolean;
+  is_closed: boolean;
+}
+
+export interface Business {
+  id: number;
+  name: string;
+  template_key: string;
+  template_title: string;
+  terminology: Record<string, string>;
+  person_type: "legal" | "individual";
+  legal_name: string;
+  national_id: string;
+  economic_code: string;
+  registration_number: string;
+  phone: string;
+  address: string;
+  effective_modules: string[];
+  current_fiscal_year: FiscalYear | null;
+  my_role: string | null;
+  is_active: boolean;
+}
+
+export interface BusinessTemplate {
+  key: string;
+  title: string;
+  description: string;
+  modules: string[];
+  terminology: Record<string, string>;
+}
+
+export const businessesAPI = {
+  list: () => api.get<Business[]>("businesses/"),
+  create: (data: Partial<Business>) => api.post<Business>("businesses/", data),
+  templates: () => api.get<BusinessTemplate[]>("business-templates/"),
+  fiscalYears: (businessId: number) =>
+    api.get<FiscalYear[]>(`businesses/${businessId}/fiscal-years/`),
+  addFiscalYear: (businessId: number, data: Partial<FiscalYear>) =>
+    api.post<FiscalYear>(`businesses/${businessId}/fiscal-years/`, data),
+  members: (businessId: number) => api.get(`businesses/${businessId}/members/`),
+  addMember: (businessId: number, data: { username: string; role: string }) =>
+    api.post(`businesses/${businessId}/members/`, data),
 };
 
 export const databaseConfigAPI = {

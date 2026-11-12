@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useSelector } from "react-redux";
+import BusinessSwitcher from "./BusinessSwitcher";
 
 type NavbarProps = { onMenuToggle: () => void };
 
@@ -60,6 +61,7 @@ const Navbar = ({ onMenuToggle }: NavbarProps) => {
 
       {/* Right side - Date */}
       <div className="flex items-center gap-3">
+        <BusinessSwitcher />
         <button
           onClick={toggleTheme}
           className="px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700/50 border border-slate-700/50"
