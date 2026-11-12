@@ -55,6 +55,7 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
     username: "",
     role: "operator",
   });
+  const [catalogMsg, setCatalogMsg] = useState("");
 
   const loadBusinesses = useCallback(async () => {
     try {
@@ -151,6 +152,40 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
       setError(
         "افزودن عضو انجام نشد. نام کاربری باید دقیقاً نام یک کاربر موجود باشد.",
       );
+    }
+  };
+
+  const applyCatalog = async () => {
+    if (!selected) return;
+    setCatalogMsg("");
+    try {
+      const { data } = await businessesAPI.applyCatalog(selected.id);
+      setCatalogMsg(
+        `کاتالوگ قالب اعمال شد: ${faNum(data.created)} قلم تازه ساخته شد و ${faNum(data.existing)} قلم از قبل بود.`,
+      );
+    } catch {
+      setCatalogMsg("اعمال کاتالوگ انجام نشد.");
+    }
+  };
+
+  const [importMsg, setImportMsg] = useState("");
+  const [importing, setImporting] = useState(false);
+  const importLegacyFile = async (file: File) => {
+    if (!selected) return;
+    setImporting(true);
+    setImportMsg("");
+    try {
+      const payload: unknown = JSON.parse(await file.text());
+      const { data } = await businessesAPI.importLegacy(selected.id, payload);
+      setImportMsg(
+        `مهاجرت انجام شد: ${faNum(data.customers_created)} مشتری تازه (${faNum(data.customers_matched)} تکراری)، ${faNum(data.services_created)} خدمت، ${faNum(data.staff_created)} پرسنل، ${faNum(data.invoices_created)} فاکتور با ${faNum(data.items_created)} قلم؛ ${faNum(data.invoices_skipped)} فاکتور به‌خاطر شمارهٔ تکراری رد شد.`,
+      );
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })
+        ?.response?.data?.detail;
+      setImportMsg(detail || "مهاجرت انجام نشد؛ فایل پشتیبان را بررسی کنید.");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -277,6 +312,71 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
 
       {selected && (
         <>
+          <Section
+            title={`پروفایل فاکتور و کاتالوگ — ${selected.name}`}
+            icon="🧾"
+          >
+            <p className="text-sm text-slate-300">
+              قالب «{selected.template_title}» تعیین می‌کند فاکتور این کسب‌وکار
+              چه شکلی باشد:{" "}
+              {selected.invoice_profile.vehicle
+                ? "بلوک مشخصات خودرو دارد"
+                : "بلوک خودرو ندارد"}
+              {selected.invoice_profile.extras.length > 0 && (
+                <>
+                  {" "}
+                  و فیلدهای اختصاصی آن عبارت‌اند از:{" "}
+                  {selected.invoice_profile.extras
+                    .map((extra) => extra.label)
+                    .join("، ")}
+                  .
+                </>
+              )}
+            </p>
+            <p className="text-xs text-slate-400 mt-2">
+              کاتالوگ آغازین قالب (خدمات/کالاهای آماده) هنگام ساخت کسب‌وکار
+              ساخته می‌شود؛ با دکمهٔ زیر می‌توانید اقلام جاافتاده را دوباره
+              اضافه کنید — اقلام موجود و قیمت‌هایشان دست نمی‌خورند.
+            </p>
+            <button
+              onClick={applyCatalog}
+              className="mt-3 px-4 py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded-xl transition-all"
+            >
+              اعمال کاتالوگ قالب
+            </button>
+            {catalogMsg && (
+              <p className="text-xs text-emerald-300 mt-2">{catalogMsg}</p>
+            )}
+          </Section>
+
+          <Section title={`مهاجرت از محاسب‌پرو — ${selected.name}`} icon="🚚">
+            <p className="text-sm text-slate-300">
+              فایل پشتیبان محاسب‌پرو (JSON و بدون رمز) را انتخاب کنید؛ مشتری‌ها،
+              خدمات، پرسنل و فاکتورها با اقلامشان به این کسب‌وکار منتقل می‌شوند.
+              فاکتورهایی که شماره‌شان در این کسب‌وکار هست رد می‌شوند و مشتری
+              تکراری (با کد ملی یا تلفن یکسان) دوباره ساخته نمی‌شود — پس
+              می‌توانید مهاجرت را با خیال راحت تکرار کنید.
+            </p>
+            <label className="inline-block mt-3 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-xl transition-all cursor-pointer">
+              {importing
+                ? "در حال مهاجرت…"
+                : "انتخاب فایل پشتیبان و شروع مهاجرت"}
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) importLegacyFile(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {importMsg && (
+              <p className="text-xs text-emerald-300 mt-2">{importMsg}</p>
+            )}
+          </Section>
+
           <Section title={`سال‌های مالی — ${selected.name}`} icon="📅">
             <div className="space-y-2 mb-4">
               {years.length === 0 && (

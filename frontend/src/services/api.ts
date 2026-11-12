@@ -317,12 +317,25 @@ export interface FiscalYear {
   is_closed: boolean;
 }
 
+export interface InvoiceExtraField {
+  key: string;
+  label: string;
+  type: "text" | "number" | "select";
+  options?: string[];
+}
+
+export interface InvoiceProfile {
+  vehicle: boolean;
+  extras: InvoiceExtraField[];
+}
+
 export interface Business {
   id: number;
   name: string;
   template_key: string;
   template_title: string;
   terminology: Record<string, string>;
+  invoice_profile: InvoiceProfile;
   person_type: "legal" | "individual";
   legal_name: string;
   national_id: string;
@@ -342,6 +355,8 @@ export interface BusinessTemplate {
   description: string;
   modules: string[];
   terminology: Record<string, string>;
+  invoice_profile: InvoiceProfile;
+  catalog: { title: string; default_main_price: number }[];
 }
 
 export const businessesAPI = {
@@ -352,6 +367,27 @@ export const businessesAPI = {
     api.get<FiscalYear[]>(`businesses/${businessId}/fiscal-years/`),
   addFiscalYear: (businessId: number, data: Partial<FiscalYear>) =>
     api.post<FiscalYear>(`businesses/${businessId}/fiscal-years/`, data),
+  applyChart: (businessId: number) =>
+    api.post<{ created: number; existing: number }>(
+      `businesses/${businessId}/apply-chart/`,
+      {},
+    ),
+  importLegacy: (businessId: number, payload: unknown) =>
+    api.post<{
+      customers_created: number;
+      customers_matched: number;
+      services_created: number;
+      staff_created: number;
+      staff_matched: number;
+      invoices_created: number;
+      invoices_skipped: number;
+      items_created: number;
+    }>(`businesses/${businessId}/import-legacy/`, { payload }),
+  applyCatalog: (businessId: number) =>
+    api.post<{ created: number; existing: number }>(
+      `businesses/${businessId}/apply-catalog/`,
+      {},
+    ),
   members: (businessId: number) => api.get(`businesses/${businessId}/members/`),
   addMember: (businessId: number, data: { username: string; role: string }) =>
     api.post(`businesses/${businessId}/members/`, data),
@@ -427,6 +463,368 @@ export const vehicleTypesAPI = {
   list: () => api.get("vehicle-types/"),
   create: (data: Payload) => api.post("vehicle-types/", data),
   delete: (id: Id) => api.delete(`vehicle-types/${id}/`),
+};
+
+// ---- Accounting (ERP phase 1) ----
+export interface Account {
+  id: number;
+  business: number;
+  code: string;
+  title: string;
+  parent: number | null;
+  parent_code: string | null;
+  level: number;
+  level_label: string;
+  nature: "debit" | "credit";
+  is_active: boolean;
+  is_system: boolean;
+}
+
+export interface JournalLine {
+  id?: number;
+  account: number;
+  account_code?: string;
+  account_title?: string;
+  party?: number | null;
+  party_name?: string;
+  description: string;
+  debit: number;
+  credit: number;
+}
+
+export interface JournalEntry {
+  id: number;
+  business: number;
+  fiscal_year: number;
+  number: number;
+  date: string;
+  description: string;
+  reference: string;
+  status: "draft" | "posted";
+  status_display: string;
+  lines: JournalLine[];
+  total_debit: number;
+  total_credit: number;
+  is_balanced: boolean;
+  created_by_name: string;
+}
+
+export interface TrialBalanceRow {
+  account: number;
+  code: string;
+  title: string;
+  nature: string;
+  total_debit: number;
+  total_credit: number;
+  balance_debit: number;
+  balance_credit: number;
+}
+
+export const accountingAPI = {
+  accounts: () => api.get<Account[]>("accounts/"),
+  createAccount: (data: Partial<Account>) =>
+    api.post<Account>("accounts/", data),
+  deleteAccount: (id: number) => api.delete(`accounts/${id}/`),
+  seedChart: () =>
+    api.post<{ created: number; existing: number }>(
+      "accounting/seed-chart/",
+      {},
+    ),
+  entries: (params: Params = {}) => api.get("journal-entries/", { params }),
+  getEntry: (id: number) => api.get<JournalEntry>(`journal-entries/${id}/`),
+  createEntry: (data: Payload) =>
+    api.post<JournalEntry>("journal-entries/", data),
+  updateEntry: (id: number, data: Payload) =>
+    api.put<JournalEntry>(`journal-entries/${id}/`, data),
+  deleteEntry: (id: number) => api.delete(`journal-entries/${id}/`),
+  postEntry: (id: number) =>
+    api.post<JournalEntry>(`journal-entries/${id}/post/`, {}),
+  unpostEntry: (id: number) =>
+    api.post<JournalEntry>(`journal-entries/${id}/unpost/`, {}),
+  trialBalance: (fiscalYear?: number) =>
+    api.get<{
+      rows: TrialBalanceRow[];
+      total_debit: number;
+      total_credit: number;
+      is_balanced: boolean;
+    }>("accounting/trial-balance/", {
+      params: fiscalYear ? { fiscal_year: fiscalYear } : {},
+    }),
+  ledger: (account: number, fiscalYear?: number) =>
+    api.get("accounting/ledger/", {
+      params: { account, ...(fiscalYear ? { fiscal_year: fiscalYear } : {}) },
+    }),
+};
+
+// ---- Inventory & purchasing (ERP phase 2) ----
+export interface Warehouse {
+  id: number;
+  business: number;
+  name: string;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+export interface Product {
+  id: number;
+  business: number;
+  code: string;
+  name: string;
+  unit: string;
+  barcode: string;
+  average_cost: number;
+  sale_price: number;
+  is_active: boolean;
+  current_stock: number;
+  stock_value: number;
+}
+
+export interface PurchaseLine {
+  id?: number;
+  product: number;
+  product_name?: string;
+  product_code?: string;
+  quantity: number;
+  unit_price: number;
+  total?: number;
+}
+
+export interface PurchaseInvoice {
+  id: number;
+  business: number;
+  fiscal_year: number;
+  supplier: number;
+  supplier_name: string;
+  number: number;
+  date: string;
+  description: string;
+  status: "draft" | "posted";
+  status_display: string;
+  vat_amount: number;
+  journal_entry: number | null;
+  lines: PurchaseLine[];
+  total: number;
+}
+
+export const inventoryAPI = {
+  warehouses: () => api.get<Warehouse[]>("warehouses/"),
+  products: () => api.get<Product[]>("products/"),
+  createProduct: (data: Partial<Product>) =>
+    api.post<Product>("products/", data),
+  updateProduct: (id: number, data: Partial<Product>) =>
+    api.patch<Product>(`products/${id}/`, data),
+  deleteProduct: (id: number) => api.delete(`products/${id}/`),
+  purchases: () => api.get("purchases/"),
+  createPurchase: (data: Payload) =>
+    api.post<PurchaseInvoice>("purchases/", data),
+  updatePurchase: (id: number, data: Payload) =>
+    api.put<PurchaseInvoice>(`purchases/${id}/`, data),
+  deletePurchase: (id: number) => api.delete(`purchases/${id}/`),
+  postPurchase: (id: number) =>
+    api.post<PurchaseInvoice>(`purchases/${id}/post/`, {}),
+  unpostPurchase: (id: number) =>
+    api.post<PurchaseInvoice>(`purchases/${id}/unpost/`, {}),
+  kardex: (product: number) =>
+    api.get("inventory/kardex/", { params: { product } }),
+  adjust: (data: Payload) => api.post("inventory/adjust/", data),
+};
+
+// ---- Personnel & payroll (ERP phase 3) ----
+export interface EmploymentProfile {
+  id: number;
+  business: number;
+  staff: number;
+  staff_name: string;
+  personnel_code: string;
+  national_id: string;
+  insurance_number: string;
+  bank_iban: string;
+  contract_type: string;
+  contract_type_display: string;
+  base_salary: number;
+  housing_allowance: number;
+  food_allowance: number;
+  child_allowance_each: number;
+  children_count: number;
+  is_insured: boolean;
+  is_active: boolean;
+}
+
+export interface Payslip {
+  id: number;
+  period: number;
+  profile: number;
+  staff_name: string;
+  personnel_code: string;
+  days_worked: number;
+  overtime_hours: number;
+  other_additions: number;
+  other_deductions: number;
+  base_pay: number;
+  housing: number;
+  food: number;
+  child: number;
+  overtime_pay: number;
+  gross: number;
+  insurance_base: number;
+  insurance_employee: number;
+  insurance_employer: number;
+  taxable_income: number;
+  tax: number;
+  net: number;
+}
+
+export interface PayrollPeriod {
+  id: number;
+  business: number;
+  year: number;
+  month: number;
+  status: "draft" | "finalized";
+  status_display: string;
+  journal_entry: number | null;
+  payslip_count: number;
+  totals: {
+    gross: number;
+    net: number;
+    tax: number;
+    insurance_employee: number;
+    insurance_employer: number;
+  };
+}
+
+export const payrollAPI = {
+  settings: () => api.get("payroll/settings/"),
+  updateSettings: (data: Payload) => api.patch("payroll/settings/", data),
+  profiles: () => api.get<EmploymentProfile[]>("employment-profiles/"),
+  createProfile: (data: Payload) =>
+    api.post<EmploymentProfile>("employment-profiles/", data),
+  updateProfile: (id: number, data: Payload) =>
+    api.patch<EmploymentProfile>(`employment-profiles/${id}/`, data),
+  deleteProfile: (id: number) => api.delete(`employment-profiles/${id}/`),
+  periods: () => api.get("payroll-periods/"),
+  createPeriod: (data: Payload) =>
+    api.post<PayrollPeriod>("payroll-periods/", data),
+  deletePeriod: (id: number) => api.delete(`payroll-periods/${id}/`),
+  generate: (id: number) => api.post(`payroll-periods/${id}/generate/`, {}),
+  finalize: (id: number) =>
+    api.post<PayrollPeriod>(`payroll-periods/${id}/finalize/`, {}),
+  unfinalize: (id: number) =>
+    api.post<PayrollPeriod>(`payroll-periods/${id}/unfinalize/`, {}),
+  payslips: (periodId: number) =>
+    api.get<Payslip[]>(`payroll-periods/${periodId}/payslips/`),
+  updatePayslip: (id: number, data: Payload) =>
+    api.patch<Payslip>(`payslips/${id}/`, data),
+  exportBank: (periodId: number) =>
+    api.get(`payroll-periods/${periodId}/export-bank/`, {
+      responseType: "blob",
+    }),
+  exportInsurance: (periodId: number) =>
+    api.get(`payroll-periods/${periodId}/export-insurance/`, {
+      responseType: "blob",
+    }),
+};
+
+// ---- Tax & fixed assets (ERP phase 4) ----
+export interface VatReport {
+  year: number;
+  season: number;
+  sales_count: number;
+  sales_base: number;
+  output_vat: number;
+  purchases_count: number;
+  purchases_base: number;
+  input_vat: number;
+  payable: number;
+}
+
+export interface SeasonalRow {
+  party: number | null;
+  party_name: string;
+  national_id: string;
+  side: "sale" | "purchase";
+  count: number;
+  amount: number;
+  vat: number;
+}
+
+export interface MoadianSubmission {
+  id: number;
+  invoice: number;
+  invoice_number: string;
+  customer_name: string;
+  status: "queued" | "sent" | "failed";
+  status_display: string;
+  unique_id: string;
+  note: string;
+  submitted_at: string | null;
+}
+
+export interface FixedAsset {
+  id: number;
+  business: number;
+  code: string;
+  name: string;
+  category: string;
+  category_display: string;
+  purchase_date: string;
+  cost: number;
+  salvage_value: number;
+  useful_life_years: number;
+  accumulated_depreciation: number;
+  depreciated_months: number;
+  monthly_depreciation: number;
+  book_value: number;
+  is_active: boolean;
+}
+
+export interface DepreciationRun {
+  id: number;
+  year: number;
+  month: number;
+  total_amount: number;
+  journal_entry: number | null;
+  lines: {
+    id: number;
+    asset: number;
+    asset_name: string;
+    asset_code: string;
+    amount: number;
+  }[];
+  created_at: string;
+}
+
+export const taxAPI = {
+  settings: () => api.get("tax/settings/"),
+  updateSettings: (data: Payload) => api.patch("tax/settings/", data),
+  vatReport: (year: number, season: number) =>
+    api.get<VatReport>("tax/vat-report/", { params: { year, season } }),
+  seasonal: (year: number, season: number) =>
+    api.get<{ rows: SeasonalRow[] }>("tax/seasonal/", {
+      params: { year, season },
+    }),
+  seasonalCsv: (year: number, season: number) =>
+    api.get("tax/seasonal/", {
+      params: { year, season, export: "csv" },
+      responseType: "blob",
+    }),
+  submissions: () => api.get("moadian-submissions/"),
+  queue: (invoice: number) =>
+    api.post<MoadianSubmission>("moadian-submissions/queue/", { invoice }),
+  markSent: (id: number, data: Payload = {}) =>
+    api.post<MoadianSubmission>(`moadian-submissions/${id}/mark-sent/`, data),
+  markFailed: (id: number, data: Payload = {}) =>
+    api.post<MoadianSubmission>(`moadian-submissions/${id}/mark-failed/`, data),
+};
+
+export const assetsAPI = {
+  list: () => api.get<FixedAsset[]>("fixed-assets/"),
+  create: (data: Payload) => api.post<FixedAsset>("fixed-assets/", data),
+  update: (id: number, data: Payload) =>
+    api.patch<FixedAsset>(`fixed-assets/${id}/`, data),
+  delete: (id: number) => api.delete(`fixed-assets/${id}/`),
+  runs: () => api.get("depreciation-runs/"),
+  run: (data: Payload) => api.post<DepreciationRun>("depreciation-runs/", data),
+  deleteRun: (id: number) => api.delete(`depreciation-runs/${id}/`),
 };
 
 // ---- User Management (admin only) ----

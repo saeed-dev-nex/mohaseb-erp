@@ -8,6 +8,11 @@ from .views import (
     ExpenseViewSet, StaffViewSet, BackupViewSet, VehicleTypeViewSet,
     UserViewSet, BackupConfigViewSet, DatabaseConfigViewSet, AppUpdateViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet, ChatMessageViewSet,
     BusinessViewSet, BusinessTemplateListView,
+    AccountViewSet, JournalEntryViewSet, ChartSeedView, TrialBalanceView, AccountLedgerView,
+    WarehouseViewSet, ProductViewSet, PurchaseInvoiceViewSet, KardexView, StockAdjustView,
+    EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView, PayslipViewSet,
+    TaxSettingsView, VatReportView, SeasonalReportView, MoadianSubmissionViewSet,
+    FixedAssetViewSet, DepreciationRunViewSet,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -37,11 +42,31 @@ router.register(r'chat', ChatMessageViewSet, basename='chat')
 router.register(r'welcome-settings', WelcomeSettingsViewSet, basename='welcome-settings')
 router.register(r'social-networks', SocialNetworkViewSet, basename='social-network')
 router.register(r'businesses', BusinessViewSet, basename='business')
+router.register(r'accounts', AccountViewSet, basename='account')
+router.register(r'journal-entries', JournalEntryViewSet, basename='journal-entry')
+router.register(r'warehouses', WarehouseViewSet, basename='warehouse')
+router.register(r'products', ProductViewSet, basename='product')
+router.register(r'purchases', PurchaseInvoiceViewSet, basename='purchase')
+router.register(r'employment-profiles', EmploymentProfileViewSet, basename='employment-profile')
+router.register(r'payroll-periods', PayrollPeriodViewSet, basename='payroll-period')
+router.register(r'payslips', PayslipViewSet, basename='payslip')
+router.register(r'moadian-submissions', MoadianSubmissionViewSet, basename='moadian-submission')
+router.register(r'fixed-assets', FixedAssetViewSet, basename='fixed-asset')
+router.register(r'depreciation-runs', DepreciationRunViewSet, basename='depreciation-run')
 
 
 urlpatterns = [
     path('changes/', database_revision, name='database_revision'),
     path('business-templates/', BusinessTemplateListView.as_view(), name='business_templates'),
+    path('accounting/seed-chart/', ChartSeedView.as_view(), name='accounting_seed_chart'),
+    path('accounting/trial-balance/', TrialBalanceView.as_view(), name='accounting_trial_balance'),
+    path('accounting/ledger/', AccountLedgerView.as_view(), name='accounting_ledger'),
+    path('inventory/kardex/', KardexView.as_view(), name='inventory_kardex'),
+    path('inventory/adjust/', StockAdjustView.as_view(), name='inventory_adjust'),
+    path('payroll/settings/', PayrollSettingsView.as_view(), name='payroll_settings'),
+    path('tax/settings/', TaxSettingsView.as_view(), name='tax_settings'),
+    path('tax/vat-report/', VatReportView.as_view(), name='tax_vat_report'),
+    path('tax/seasonal/', SeasonalReportView.as_view(), name='tax_seasonal'),
     path('token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/logout/', TokenLogoutView.as_view(), name='token_logout'),
     path(

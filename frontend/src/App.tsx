@@ -25,6 +25,11 @@ const StaffPage = lazy(() => import("./pages/StaffPage"));
 const UsersPage = lazy(() => import("./pages/UsersPage"));
 const UserPerformancePage = lazy(() => import("./pages/UserPerformancePage"));
 const Chat = lazy(() => import("./pages/Chat"));
+const AccountingPage = lazy(() => import("./pages/AccountingPage"));
+const InventoryPage = lazy(() => import("./pages/InventoryPage"));
+const PayrollPage = lazy(() => import("./pages/PayrollPage"));
+const TaxPage = lazy(() => import("./pages/TaxPage"));
+const AssetsPage = lazy(() => import("./pages/AssetsPage"));
 const Layout = lazy(() => import("./components/Layout"));
 
 const PageLoader = () => (
@@ -167,6 +172,56 @@ function App() {
               element={
                 <ModuleRoute module="cheques">
                   <Cheques />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Accounting (ERP phase 1) */}
+            <Route
+              path="accounting"
+              element={
+                <ModuleRoute module="accounting">
+                  <AccountingPage />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Inventory & purchasing (ERP phase 2) */}
+            <Route
+              path="inventory"
+              element={
+                <ModuleRoute module="inventory">
+                  <InventoryPage />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Personnel & payroll (ERP phase 3) */}
+            <Route
+              path="payroll"
+              element={
+                <ModuleRoute module="payroll">
+                  <PayrollPage />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Tax (ERP phase 4) */}
+            <Route
+              path="tax"
+              element={
+                <ModuleRoute module="tax">
+                  <TaxPage />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Fixed assets (ERP phase 4) */}
+            <Route
+              path="assets"
+              element={
+                <ModuleRoute module="assets">
+                  <AssetsPage />
                 </ModuleRoute>
               }
             />

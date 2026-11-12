@@ -42,6 +42,36 @@ const BASE_NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/expenses", label: "هزینه‌ها", icon: "💰", module: "expenses" },
       { to: "/cheques", label: "مدیریت چک‌ها", icon: "🎫", module: "cheques" },
+      {
+        to: "/accounting",
+        label: "حسابداری",
+        icon: "📒",
+        module: "accounting",
+      },
+      {
+        to: "/inventory",
+        label: "انبار و خرید",
+        icon: "📦",
+        module: "inventory",
+      },
+      {
+        to: "/payroll",
+        label: "حقوق و دستمزد",
+        icon: "💵",
+        module: "payroll",
+      },
+      {
+        to: "/tax",
+        label: "مالیات",
+        icon: "🧾",
+        module: "tax",
+      },
+      {
+        to: "/assets",
+        label: "دارایی‌ها",
+        icon: "🏢",
+        module: "assets",
+      },
     ],
   },
   {

@@ -18,6 +18,22 @@ from .settings_admin import (
 from .backup import BackupConfigViewSet, BackupViewSet
 from .app_update import AppUpdateViewSet
 from .businesses import BusinessTemplateListView, BusinessViewSet
+from .inventory import (
+    KardexView, ProductViewSet, PurchaseInvoiceViewSet, StockAdjustView,
+    WarehouseViewSet,
+)
+from .payroll import (
+    EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView,
+    PayslipViewSet,
+)
+from .tax import (
+    DepreciationRunViewSet, FixedAssetViewSet, MoadianSubmissionViewSet,
+    SeasonalReportView, TaxSettingsView, VatReportView,
+)
+from .accounting import (
+    AccountLedgerView, AccountViewSet, ChartSeedView, JournalEntryViewSet,
+    TrialBalanceView,
+)
 from .database_config import DatabaseConfigViewSet
 from .management_views import AuditLogViewSet, DashboardViewSet, StaffViewSet, UserViewSet
 
@@ -29,4 +45,12 @@ __all__ = [
     'SocialNetworkViewSet', 'WelcomeSettingsViewSet', 'BackupConfigViewSet',
     'BackupViewSet', 'DatabaseConfigViewSet', 'AppUpdateViewSet', 'AuditLogViewSet', 'DashboardViewSet', 'StaffViewSet', 'UserViewSet',
     'BusinessViewSet', 'BusinessTemplateListView',
+    'AccountViewSet', 'JournalEntryViewSet', 'ChartSeedView',
+    'TrialBalanceView', 'AccountLedgerView',
+    'WarehouseViewSet', 'ProductViewSet', 'PurchaseInvoiceViewSet',
+    'KardexView', 'StockAdjustView',
+    'EmploymentProfileViewSet', 'PayrollPeriodViewSet', 'PayrollSettingsView',
+    'PayslipViewSet',
+    'TaxSettingsView', 'VatReportView', 'SeasonalReportView',
+    'MoadianSubmissionViewSet', 'FixedAssetViewSet', 'DepreciationRunViewSet',
 ]

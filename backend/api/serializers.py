@@ -10,7 +10,10 @@ from .models import (
     Customer, Service, ServicePackage, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess,
-    Business, FiscalYear, BusinessMembership
+    Business, FiscalYear, BusinessMembership,
+    Product, Warehouse, StockMovement, PurchaseInvoice, PurchaseLine,
+    EmploymentProfile, PayrollPeriod, PayrollSettings, Payslip,
+    TaxSettings, MoadianSubmission, FixedAsset, DepreciationRun, DepreciationLine,
 )
 from .validators import validate_customer_documents_path, validate_customer_identifier, validate_national_code_field, validate_tax_id
 from .services.money import invoice_payment_totals, final_amount, office_card_fee, compute_rounding_adjustment, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
@@ -289,7 +292,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
         model = Customer
         list_serializer_class = CustomerFinancialListSerializer
         fields = [
-            'id', 'business', 'name', 'phone', 'email', 'national_id',
+            'id', 'business', 'party_role', 'person_type', 'name', 'phone', 'email', 'national_id',
             'address', 'notes', 'created_at',
             'total_invoices', 'total_paid', 'total_pending',
         ]
@@ -334,7 +337,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         model = Customer
         list_serializer_class = CustomerFinancialListSerializer
         fields = [
-            'id', 'business', 'name', 'phone', 'email', 'address',
+            'id', 'business', 'party_role', 'person_type', 'name', 'phone', 'email', 'address',
             'national_id', 'notes', 'created_at', 'updated_at',
             'documents', 'total_invoices', 'total_paid', 'total_pending'
         ]
@@ -369,12 +372,12 @@ class ServiceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Service
         fields = [
-            'id', 'title', 'description', 'has_extra', 'extra_label',
+            'id', 'business', 'title', 'description', 'has_extra', 'extra_label',
             'default_main_price', 'default_extra_price',
             'default_commission', 'commission_label',
             'is_active', 'created_at'
         ]
-        read_only_fields = ['created_at']
+        read_only_fields = ['created_at', 'business']
 
 
 class ServicePackageSerializer(serializers.ModelSerializer):
@@ -404,11 +407,16 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    product = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = InvoiceItem
         fields = [
-            'id', 'service', 'service_title', 'service_title_snapshot',
+            'id', 'service', 'product', 'service_title', 'service_title_snapshot',
             'quantity', 'main_price', 'extra_price', 'commission',
             'notes', 'line_total', 'line_commission', 'is_office_card_fee'
         ]
@@ -493,6 +501,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'commission_paid', 'rounding_enabled', 'rounding_amount', 'rounding_target', 'rounding_show_amount',
             'rounding_cleared',
             'paper_size', 'final_amount', 'items', 'created_at', 'updated_at',
+            'inventory_posted', 'sales_journal', 'cogs_journal',
             'edit_request_status', 'can_edit', 'payments', 'paid_amount', 'remaining_amount',
             # vehicle / custom fields
             'vehicle_plate', 'vehicle_vin', 'vehicle_model', 'vehicle_type',
@@ -843,6 +852,7 @@ class BusinessMembershipSerializer(serializers.ModelSerializer):
 class BusinessSerializer(serializers.ModelSerializer):
     template_title = serializers.SerializerMethodField()
     terminology = serializers.SerializerMethodField()
+    invoice_profile = serializers.SerializerMethodField()
     effective_modules = serializers.SerializerMethodField()
     current_fiscal_year = FiscalYearSerializer(read_only=True)
     my_role = serializers.SerializerMethodField()
@@ -851,6 +861,7 @@ class BusinessSerializer(serializers.ModelSerializer):
         model = Business
         fields = [
             'id', 'name', 'template_key', 'template_title', 'terminology',
+            'invoice_profile',
             'person_type', 'legal_name', 'national_id', 'economic_code',
             'registration_number', 'phone', 'address', 'modules_override',
             'effective_modules', 'current_fiscal_year', 'my_role',
@@ -864,6 +875,11 @@ class BusinessSerializer(serializers.ModelSerializer):
     def get_terminology(self, obj):
         return get_template(obj.template_key)['terminology']
 
+    def get_invoice_profile(self, obj):
+        from .business_templates import template_invoice_profile
+
+        return template_invoice_profile(obj.template_key)
+
     def get_effective_modules(self, obj):
         return obj.effective_modules()
 
@@ -876,3 +892,384 @@ class BusinessSerializer(serializers.ModelSerializer):
             return 'owner'
         membership = obj.memberships.filter(user=user).first()
         return membership.role if membership else None
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — accounting (phase 1)
+# ---------------------------------------------------------------------------
+
+from .models import Account, JournalEntry, JournalLine
+
+
+class AccountSerializer(serializers.ModelSerializer):
+    level_label = serializers.SerializerMethodField()
+    parent_code = serializers.CharField(source='parent.code', read_only=True, default=None)
+
+    class Meta:
+        model = Account
+        fields = [
+            'id', 'business', 'code', 'title', 'parent', 'parent_code',
+            'level', 'level_label', 'nature', 'is_active', 'is_system',
+            'created_at',
+        ]
+        read_only_fields = ['business', 'is_system', 'created_at']
+
+    def get_level_label(self, obj):
+        return Account.LEVEL_LABELS.get(obj.level, '')
+
+
+class JournalLineSerializer(serializers.ModelSerializer):
+    account_code = serializers.CharField(source='account.code', read_only=True)
+    account_title = serializers.CharField(source='account.title', read_only=True)
+    party_name = serializers.CharField(source='party.name', read_only=True, default='')
+
+    class Meta:
+        model = JournalLine
+        fields = [
+            'id', 'account', 'account_code', 'account_title',
+            'party', 'party_name', 'description', 'debit', 'credit',
+        ]
+
+
+class JournalEntrySerializer(serializers.ModelSerializer):
+    lines = JournalLineSerializer(many=True)
+    total_debit = serializers.SerializerMethodField()
+    total_credit = serializers.SerializerMethodField()
+    is_balanced = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JournalEntry
+        fields = [
+            'id', 'business', 'fiscal_year', 'number', 'date', 'description',
+            'reference', 'status', 'status_display', 'lines',
+            'total_debit', 'total_credit', 'is_balanced',
+            'created_by', 'created_by_name', 'posted_at',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'business', 'number', 'status', 'created_by', 'posted_at',
+            'created_at', 'updated_at',
+        ]
+        extra_kwargs = {'fiscal_year': {'required': False}}
+
+    def get_total_debit(self, obj):
+        return obj.total_debit
+
+    def get_total_credit(self, obj):
+        return obj.total_credit
+
+    def get_is_balanced(self, obj):
+        return obj.is_balanced
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return ''
+        return obj.created_by.get_full_name() or obj.created_by.username
+
+    def validate_lines(self, lines):
+        if len(lines) < 2:
+            raise serializers.ValidationError('سند حسابداری باید دست‌کم دو سطر داشته باشد.')
+        for line in lines:
+            debit = line.get('debit') or 0
+            credit = line.get('credit') or 0
+            if debit > 0 and credit > 0:
+                raise serializers.ValidationError('هر سطر فقط می‌تواند بدهکار یا بستانکار باشد.')
+            if debit == 0 and credit == 0:
+                raise serializers.ValidationError('مبلغ هر سطر باید بزرگ‌تر از صفر باشد.')
+            account = line.get('account')
+            if account is not None and not account.is_postable:
+                raise serializers.ValidationError(
+                    f'حساب «{account.code} — {account.title}» معین یا تفصیلی نیست و سند نمی‌خورد.'
+                )
+        return lines
+
+    def create(self, validated_data):
+        lines = validated_data.pop('lines')
+        entry = JournalEntry.objects.create(**validated_data)
+        for line in lines:
+            JournalLine.objects.create(entry=entry, **line)
+        return entry
+
+    def update(self, instance, validated_data):
+        lines = validated_data.pop('lines', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        if lines is not None:
+            instance.lines.all().delete()
+            for line in lines:
+                JournalLine.objects.create(entry=instance, **line)
+        return instance
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — inventory & purchasing (phase 2)
+# ---------------------------------------------------------------------------
+
+
+
+class WarehouseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Warehouse
+        fields = ['id', 'business', 'name', 'is_default', 'is_active', 'created_at']
+        read_only_fields = ['business', 'created_at']
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    current_stock = serializers.SerializerMethodField()
+    stock_value = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'business', 'code', 'name', 'unit', 'barcode',
+            'average_cost', 'sale_price', 'is_active',
+            'current_stock', 'stock_value', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'average_cost', 'created_at', 'updated_at']
+
+    def get_current_stock(self, obj):
+        annotated = getattr(obj, 'stock_qty', None)
+        return annotated if annotated is not None else obj.current_stock
+
+    def get_stock_value(self, obj):
+        stock = self.get_current_stock(obj)
+        return Decimal(stock) * obj.average_cost
+
+
+class StockMovementSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_code = serializers.CharField(source='product.code', read_only=True)
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+    signed_quantity = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StockMovement
+        fields = [
+            'id', 'business', 'product', 'product_name', 'product_code',
+            'warehouse', 'kind', 'kind_display', 'quantity', 'signed_quantity',
+            'unit_cost', 'source_type', 'source_id', 'date', 'note', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_signed_quantity(self, obj):
+        return obj.signed_quantity
+
+
+class PurchaseLineSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_code = serializers.CharField(source='product.code', read_only=True)
+    total = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PurchaseLine
+        fields = ['id', 'product', 'product_name', 'product_code', 'quantity', 'unit_price', 'total']
+
+    def get_total(self, obj):
+        return obj.total
+
+
+class PurchaseInvoiceSerializer(serializers.ModelSerializer):
+    lines = PurchaseLineSerializer(many=True)
+    total = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = PurchaseInvoice
+        fields = [
+            'id', 'business', 'fiscal_year', 'supplier', 'supplier_name',
+            'number', 'date', 'description', 'status', 'status_display',
+            'vat_amount', 'journal_entry', 'lines', 'total', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'number', 'status', 'journal_entry', 'created_at', 'updated_at']
+        extra_kwargs = {'fiscal_year': {'required': False}}
+
+    def get_total(self, obj):
+        return obj.total
+
+    def validate_lines(self, lines):
+        if not lines:
+            raise serializers.ValidationError('فاکتور خرید باید دست‌کم یک سطر داشته باشد.')
+        return lines
+
+    def create(self, validated_data):
+        lines = validated_data.pop('lines')
+        purchase = PurchaseInvoice.objects.create(**validated_data)
+        for line in lines:
+            PurchaseLine.objects.create(purchase=purchase, **line)
+        return purchase
+
+    def update(self, instance, validated_data):
+        lines = validated_data.pop('lines', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        if lines is not None:
+            instance.lines.all().delete()
+            for line in lines:
+                PurchaseLine.objects.create(purchase=instance, **line)
+        return instance
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — personnel & payroll (phase 3)
+# ---------------------------------------------------------------------------
+
+
+
+class PayrollSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PayrollSettings
+        fields = [
+            'id', 'business', 'insurance_employee_rate',
+            'insurance_employer_rate', 'overtime_factor', 'tax_brackets',
+            'updated_at',
+        ]
+        read_only_fields = ['business', 'updated_at']
+
+
+class EmploymentProfileSerializer(serializers.ModelSerializer):
+    staff_name = serializers.CharField(source='staff.name', read_only=True)
+    contract_type_display = serializers.CharField(source='get_contract_type_display', read_only=True)
+
+    class Meta:
+        model = EmploymentProfile
+        fields = [
+            'id', 'business', 'staff', 'staff_name', 'personnel_code',
+            'national_id', 'insurance_number', 'bank_iban',
+            'contract_type', 'contract_type_display', 'hire_date',
+            'base_salary', 'housing_allowance', 'food_allowance',
+            'child_allowance_each', 'children_count', 'is_insured',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'created_at', 'updated_at']
+
+
+class PayslipSerializer(serializers.ModelSerializer):
+    staff_name = serializers.CharField(source='profile.staff.name', read_only=True)
+    personnel_code = serializers.CharField(source='profile.personnel_code', read_only=True)
+
+    class Meta:
+        model = Payslip
+        fields = [
+            'id', 'period', 'profile', 'staff_name', 'personnel_code',
+            'days_worked', 'overtime_hours', 'other_additions',
+            'other_deductions', 'base_pay', 'housing', 'food', 'child',
+            'overtime_pay', 'gross', 'insurance_base',
+            'insurance_employee', 'insurance_employer', 'taxable_income',
+            'tax', 'net', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'period', 'profile', 'base_pay', 'housing', 'food', 'child',
+            'overtime_pay', 'gross', 'insurance_base',
+            'insurance_employee', 'insurance_employer', 'taxable_income',
+            'tax', 'net', 'created_at', 'updated_at',
+        ]
+
+
+class PayrollPeriodSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    payslip_count = serializers.SerializerMethodField()
+    totals = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PayrollPeriod
+        fields = [
+            'id', 'business', 'year', 'month', 'status', 'status_display',
+            'journal_entry', 'payslip_count', 'totals',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'status', 'journal_entry', 'created_at', 'updated_at']
+
+    def get_payslip_count(self, obj):
+        return obj.payslips.count()
+
+    def get_totals(self, obj):
+        from decimal import Decimal as _D
+
+        slips = obj.payslips.all()
+        return {
+            'gross': sum((s.gross for s in slips), _D(0)),
+            'net': sum((s.net for s in slips), _D(0)),
+            'tax': sum((s.tax for s in slips), _D(0)),
+            'insurance_employee': sum((s.insurance_employee for s in slips), _D(0)),
+            'insurance_employer': sum((s.insurance_employer for s in slips), _D(0)),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — tax & fixed assets (phase 4)
+# ---------------------------------------------------------------------------
+
+
+
+class TaxSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxSettings
+        fields = ['id', 'business', 'is_vat_registered', 'vat_rate', 'economic_code', 'updated_at']
+        read_only_fields = ['business', 'updated_at']
+
+
+class MoadianSubmissionSerializer(serializers.ModelSerializer):
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True)
+    customer_name = serializers.CharField(source='invoice.customer.name', read_only=True, default='')
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = MoadianSubmission
+        fields = [
+            'id', 'business', 'invoice', 'invoice_number', 'customer_name',
+            'status', 'status_display', 'unique_id', 'note', 'submitted_at',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'created_at', 'updated_at']
+
+
+class FixedAssetSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    monthly_depreciation = serializers.SerializerMethodField()
+    book_value = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FixedAsset
+        fields = [
+            'id', 'business', 'code', 'name', 'category', 'category_display',
+            'purchase_date', 'cost', 'salvage_value', 'useful_life_years',
+            'accumulated_depreciation', 'depreciated_months',
+            'monthly_depreciation', 'book_value', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'business', 'accumulated_depreciation', 'depreciated_months',
+            'created_at', 'updated_at',
+        ]
+
+    def get_monthly_depreciation(self, obj):
+        return obj.monthly_depreciation
+
+    def get_book_value(self, obj):
+        return obj.book_value
+
+
+class DepreciationLineSerializer(serializers.ModelSerializer):
+    asset_name = serializers.CharField(source='asset.name', read_only=True)
+    asset_code = serializers.CharField(source='asset.code', read_only=True)
+
+    class Meta:
+        model = DepreciationLine
+        fields = ['id', 'asset', 'asset_name', 'asset_code', 'amount']
+
+
+class DepreciationRunSerializer(serializers.ModelSerializer):
+    lines = DepreciationLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DepreciationRun
+        fields = [
+            'id', 'business', 'year', 'month', 'total_amount',
+            'journal_entry', 'lines', 'created_at',
+        ]
+        read_only_fields = fields
