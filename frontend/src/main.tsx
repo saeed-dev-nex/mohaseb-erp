@@ -4,6 +4,7 @@ import { Provider } from "react-redux";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { store } from "./store";
 import { queryClient } from "./lib/queryClient";
+import { BusinessProvider } from "./lib/business";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./index.css";
@@ -71,7 +72,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <Provider store={store}>
-          <App />
+          <BusinessProvider>
+            <App />
+          </BusinessProvider>
         </Provider>
       </QueryClientProvider>
     </ErrorBoundary>

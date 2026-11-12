@@ -14,6 +14,7 @@ import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { BackupTab } from "./settings/BackupTab";
 import { DatabaseTab } from "./settings/DatabaseTab";
 import { UpdateTab } from "./settings/UpdateTab";
+import { BusinessesTab } from "./settings/BusinessesTab";
 import { ServerFolderPicker } from "./settings/ServerFolderPicker";
 
 type ProfileForm = {
@@ -109,6 +110,12 @@ const Settings = () => {
   });
   const settingsTabs = [
     { id: "brand", label: "برند و تماس", icon: "🎨", visible: true },
+    {
+      id: "businesses",
+      label: "کسب‌وکارها",
+      icon: "🏢",
+      visible: isSuperuser,
+    },
     { id: "invoice", label: "تنظیمات فاکتور", icon: "🧾", visible: isManager },
     { id: "packages", label: "پکیج‌های خدمات", icon: "📦", visible: true },
     {
@@ -1046,6 +1053,11 @@ const Settings = () => {
           {/* ── App Update Section ── */}
           {activeTab === "update" && isSuperuser && (
             <UpdateTab isSuperuser={isSuperuser} />
+          )}
+
+          {/* ── Businesses (ERP) Section ── */}
+          {activeTab === "businesses" && isSuperuser && (
+            <BusinessesTab isSuperuser={isSuperuser} />
           )}
           <ServerFolderPicker
             open={docsPickerOpen}

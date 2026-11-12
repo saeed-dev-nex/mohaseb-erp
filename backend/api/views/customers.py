@@ -35,6 +35,7 @@ from ..serializers import (
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
+from ..business_context import resolve_business
 from ..audit import snapshot, record_audit, is_invoice_content_version
 from ..pagination import OptionalPageNumberPagination
 
@@ -69,10 +70,18 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 Q(email__icontains=search) |
                 Q(national_id__icontains=search)
             )
+        # ERP: when the caller selected a business, scope the list to it.
+        business = resolve_business(self.request)
+        if business is not None:
+            qs = qs.filter(business=business)
         return qs
 
     def perform_create(self, serializer):
-        customer = serializer.save()
+        business = resolve_business(self.request)
+        extra = {}
+        if business is not None:
+            extra['business'] = business
+        customer = serializer.save(**extra)
         record_audit(user=self.request.user, instance=customer, action='create', after=snapshot(customer))
 
     def perform_update(self, serializer):

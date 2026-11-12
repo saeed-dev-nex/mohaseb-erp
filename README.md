@@ -1,3 +1,18 @@
+# محاسب ERP | Mohaseb ERP
+
+[![CI](https://github.com/saeed-dev-nex/mohaseb-erp/actions/workflows/ci.yml/badge.svg)](https://github.com/saeed-dev-nex/mohaseb-erp/actions/workflows/ci.yml)
+
+نسخهٔ چندکسب‌وکاری و پیشرفتهٔ محاسب‌پرو برای شغل‌های مختلف: یک هستهٔ یکپارچه با
+**قالب شغلی** (خدمات و تعمیرات، فروشگاه، بازرگانی و پخش، تولیدی، رستوران، خدمات
+عمومی) و نقشهٔ راه ماژول‌های حسابداری، انبارداری، فروش و خرید، منابع انسانی،
+حقوق و دستمزد و مالیات (حقیقی و حقوقی).
+
+**وضعیت: فاز صفر** — اسکلت چندکسب‌وکاری: موجودیت «کسب‌وکار» و «سال مالی»،
+عضویت و نقش کاربران در هر کسب‌وکار، قالب‌های شغلی، و بُعد کسب‌وکار روی
+فاکتورها و مشتریان. بیس این مخزن محاسب‌پرو است و مستندات پایهٔ آن در ادامه آمده.
+
+---
+
 # محاسب پرو | Mohaseb Pro
 
 [![CI](https://github.com/saeed-dev-nex/mohaseb-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/saeed-dev-nex/mohaseb-pro/actions/workflows/ci.yml)
