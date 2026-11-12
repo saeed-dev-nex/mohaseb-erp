@@ -11,10 +11,4 @@ if errorlevel 1 (
     echo [ERROR] Database migrations failed.
     exit /b 1
 )
-
-"%BACKEND_PYTHON%" manage.py ensure_admin
-if errorlevel 1 (
-    echo [ERROR] Could not check or create the administrator account.
-    exit /b 1
-)
 endlocal

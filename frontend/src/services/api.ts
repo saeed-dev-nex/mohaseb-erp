@@ -724,6 +724,22 @@ export const payrollAPI = {
     }),
 };
 
+// ---- First-run setup wizard ----
+export const setupAPI = {
+  status: () =>
+    api.get<{ needs_setup: boolean; engine: string; source: string }>(
+      "setup/status/",
+    ),
+  testDatabase: (data: Payload) => api.post("setup/test-database/", data),
+  configureDatabase: (data: Payload) =>
+    api.post<{ started: boolean; restart_required: boolean }>(
+      "setup/configure-database/",
+      data,
+    ),
+  createAdmin: (data: Payload) =>
+    api.post<{ created: boolean; username: string }>("setup/admin/", data),
+};
+
 // ---- Tax & fixed assets (ERP phase 4) ----
 export interface VatReport {
   year: number;
