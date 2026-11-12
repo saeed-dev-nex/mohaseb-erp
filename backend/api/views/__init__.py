@@ -18,6 +18,10 @@ from .settings_admin import (
 from .backup import BackupConfigViewSet, BackupViewSet
 from .app_update import AppUpdateViewSet
 from .businesses import BusinessTemplateListView, BusinessViewSet
+from .inventory import (
+    KardexView, ProductViewSet, PurchaseInvoiceViewSet, StockAdjustView,
+    WarehouseViewSet,
+)
 from .accounting import (
     AccountLedgerView, AccountViewSet, ChartSeedView, JournalEntryViewSet,
     TrialBalanceView,
@@ -35,4 +39,6 @@ __all__ = [
     'BusinessViewSet', 'BusinessTemplateListView',
     'AccountViewSet', 'JournalEntryViewSet', 'ChartSeedView',
     'TrialBalanceView', 'AccountLedgerView',
+    'WarehouseViewSet', 'ProductViewSet', 'PurchaseInvoiceViewSet',
+    'KardexView', 'StockAdjustView',
 ]

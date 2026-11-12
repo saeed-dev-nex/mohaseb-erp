@@ -24,6 +24,7 @@ from ..serializers import (
 )
 from ..services.business_setup import create_default_fiscal_year, seed_template_catalog
 from ..services.accounting import seed_standard_chart
+from ..services.inventory import get_default_warehouse
 
 MANAGE_ROLES = ('owner', 'manager')
 
@@ -72,6 +73,7 @@ class BusinessViewSet(viewsets.ModelViewSet):
         create_default_fiscal_year(business)
         seed_template_catalog(business)
         seed_standard_chart(business)
+        get_default_warehouse(business)
         return Response(
             self.get_serializer(business).data, status=status.HTTP_201_CREATED,
         )

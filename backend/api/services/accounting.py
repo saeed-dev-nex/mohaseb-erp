@@ -113,3 +113,58 @@ def account_ledger(business, fiscal_year, account):
             'balance': running,
         })
     return rows
+
+
+def account_by_code(business, code):
+    """Fetch one account by code, seeding the standard chart if absent."""
+    from ..models import Account
+
+    account = Account.objects.filter(business=business, code=code).first()
+    if account is None:
+        seed_standard_chart(business)
+        account = Account.objects.filter(business=business, code=code).first()
+    return account
+
+
+def create_posted_entry(business, date, description, lines_spec, reference=''):
+    """Create a journal entry and post it in one step (auto-journals).
+
+    ``lines_spec`` items: (account_code, debit, credit, party, line_desc).
+    The entry lands in the fiscal year containing ``date`` (falling back
+    to the business's current year). Raises ValueError when the spec is
+    unbalanced or an account code cannot be resolved.
+    """
+    from django.db import transaction
+    from django.db.models import Max
+    from django.utils import timezone
+
+    from ..models import JournalEntry, JournalLine
+
+    total_debit = sum(spec[1] for spec in lines_spec)
+    total_credit = sum(spec[2] for spec in lines_spec)
+    if total_debit != total_credit or total_debit <= 0:
+        raise ValueError('سند خودکار تراز نیست.')
+    fiscal_year = business.fiscal_years.filter(
+        start_date__lte=date, end_date__gte=date,
+    ).first() or business.current_fiscal_year
+    if fiscal_year is None:
+        raise ValueError('سال مالی برای ثبت سند یافت نشد.')
+    with transaction.atomic():
+        last = (
+            JournalEntry.objects.filter(business=business, fiscal_year=fiscal_year)
+            .aggregate(value=Max('number'))['value'] or 0
+        )
+        entry = JournalEntry.objects.create(
+            business=business, fiscal_year=fiscal_year, number=last + 1,
+            date=date, description=description, reference=reference,
+            status='posted', posted_at=timezone.now(),
+        )
+        for code, debit, credit, party, line_desc in lines_spec:
+            account = account_by_code(business, code)
+            if account is None:
+                raise ValueError(f'حساب {code} در کدینگ یافت نشد.')
+            JournalLine.objects.create(
+                entry=entry, account=account, party=party,
+                description=line_desc, debit=debit, credit=credit,
+            )
+    return entry

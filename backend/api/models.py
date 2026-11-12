@@ -206,6 +206,15 @@ class Invoice(models.Model):
         'Business', on_delete=models.PROTECT, null=True, blank=True,
         related_name='business_invoices', verbose_name='کسب‌وکار',
     )
+    inventory_posted = models.BooleanField(default=False, verbose_name='در انبار و حسابداری ثبت شده')
+    sales_journal = models.ForeignKey(
+        'JournalEntry', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='sales_invoices', verbose_name='سند فروش',
+    )
+    cogs_journal = models.ForeignKey(
+        'JournalEntry', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cogs_invoices', verbose_name='سند بهای تمام‌شده',
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='issued_invoices', verbose_name='صادرکننده')
     paid_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='paid_invoices', verbose_name='پرداخت‌کننده')
     card_payment_source = models.CharField(
@@ -305,6 +314,7 @@ class Invoice(models.Model):
 class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, related_name='items', on_delete=models.CASCADE)
     service = models.ForeignKey(Service, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='خدمت')
+    product = models.ForeignKey('Product', on_delete=models.SET_NULL, null=True, blank=True, verbose_name='کالا')
     service_title_snapshot = models.CharField(max_length=255, blank=True, verbose_name='عنوان خدمت')
     quantity = models.IntegerField(default=1, validators=[MinValueValidator(1)], verbose_name='تعداد')
     main_price = models.DecimalField(max_digits=12, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='مبلغ پرداختی')
@@ -759,6 +769,7 @@ class UserModuleAccess(models.Model):
     chat = models.BooleanField(default=True, verbose_name='گفتگو')
     staff = models.BooleanField(default=True, verbose_name='پرسنل')
     accounting = models.BooleanField(default=True, verbose_name='حسابداری')
+    inventory = models.BooleanField(default=True, verbose_name='انبار')
     settings = models.BooleanField(default=True, verbose_name='تنظیمات')
     users = models.BooleanField(default=True, verbose_name='مدیریت کاربران')
     backup = models.BooleanField(default=True, verbose_name='بکاپ')
@@ -1079,3 +1090,203 @@ class JournalLine(models.Model):
             raise ValidationError('هر سطر سند فقط می‌تواند بدهکار یا بستانکار باشد، نه هر دو.')
         if (self.debit or 0) == 0 and (self.credit or 0) == 0:
             raise ValidationError('مبلغ سطر سند باید بزرگ‌تر از صفر باشد.')
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — inventory, purchasing and the sales link (phase 2)
+#
+# Stock is a ledger of movements; a product's current quantity is the
+# signed sum of its movements and its cost is the weighted average of
+# purchase-ins. Posting a purchase writes movements and a balanced
+# journal automatically; a sales invoice carrying product lines does
+# the same on creation (revenue + COGS).
+# ---------------------------------------------------------------------------
+
+class Warehouse(models.Model):
+    """انبار — هر کسب‌وکار دست‌کم یک انبار پیش‌فرض دارد."""
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='warehouses',
+        verbose_name='کسب‌وکار',
+    )
+    name = models.CharField(max_length=255, verbose_name='نام انبار')
+    is_default = models.BooleanField(default=False, verbose_name='انبار پیش‌فرض')
+    is_active = models.BooleanField(default=True, verbose_name='فعال')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'انبار'
+        verbose_name_plural = 'انبارها'
+
+    def __str__(self):
+        return self.name
+
+
+class Product(models.Model):
+    """کالا — با کد یکتا در هر کسب‌وکار و بهای میانگین موزون."""
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='products',
+        verbose_name='کسب‌وکار',
+    )
+    code = models.CharField(max_length=64, verbose_name='کد کالا')
+    name = models.CharField(max_length=255, verbose_name='نام کالا')
+    unit = models.CharField(max_length=32, default='عدد', verbose_name='واحد')
+    barcode = models.CharField(max_length=64, blank=True, default='', verbose_name='بارکد')
+    average_cost = models.DecimalField(
+        max_digits=18, decimal_places=0, default=0,
+        verbose_name='بهای تمام‌شدهٔ میانگین',
+    )
+    sale_price = models.DecimalField(
+        max_digits=18, decimal_places=0, default=0,
+        verbose_name='قیمت فروش پیش‌فرض',
+    )
+    is_active = models.BooleanField(default=True, verbose_name='فعال')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['code']
+        verbose_name = 'کالا'
+        verbose_name_plural = 'کالاها'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'code'], name='unique_product_code_per_business'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} — {self.name}'
+
+    @property
+    def current_stock(self):
+        total = Decimal(0)
+        for movement in self.movements.all():
+            total += movement.signed_quantity
+        return total
+
+
+class StockMovement(models.Model):
+    """گردش انبار — سند تغییر موجودی؛ مقدار همیشه مثبت و جهت با نوع مشخص است."""
+
+    KIND_CHOICES = [
+        ('in_purchase', 'ورود — خرید'),
+        ('out_sale', 'خروج — فروش'),
+        ('in_return', 'ورود — برگشت از فروش'),
+        ('out_return', 'خروج — برگشت به تأمین‌کننده'),
+        ('in_adjust', 'ورود — اصلاحی'),
+        ('out_adjust', 'خروج — اصلاحی'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='stock_movements',
+        verbose_name='کسب‌وکار',
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name='movements',
+        verbose_name='کالا',
+    )
+    warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.PROTECT, related_name='movements',
+        verbose_name='انبار',
+    )
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES, verbose_name='نوع گردش')
+    quantity = models.DecimalField(max_digits=14, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))], verbose_name='مقدار')
+    unit_cost = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='بهای واحد')
+    source_type = models.CharField(max_length=32, blank=True, default='', verbose_name='نوع سند مبدأ')
+    source_id = models.PositiveIntegerField(null=True, blank=True, verbose_name='شناسهٔ سند مبدأ')
+    date = models.DateField(verbose_name='تاریخ')
+    note = models.CharField(max_length=500, blank=True, default='', verbose_name='توضیح')
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='stock_movements', verbose_name='ثبت‌کننده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['date', 'id']
+        verbose_name = 'گردش انبار'
+        verbose_name_plural = 'گردش‌های انبار'
+
+    @property
+    def signed_quantity(self):
+        return self.quantity if self.kind.startswith('in_') else -self.quantity
+
+    @property
+    def total_cost(self):
+        return self.quantity * self.unit_cost
+
+
+class PurchaseInvoice(models.Model):
+    """فاکتور خرید از تأمین‌کننده — با ثبت نهایی، انبار و سند خودکار."""
+
+    STATUS_CHOICES = [
+        ('draft', 'پیش‌نویس'),
+        ('posted', 'ثبت‌شده'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='purchase_invoices',
+        verbose_name='کسب‌وکار',
+    )
+    fiscal_year = models.ForeignKey(
+        FiscalYear, on_delete=models.PROTECT, related_name='purchase_invoices',
+        verbose_name='سال مالی',
+    )
+    supplier = models.ForeignKey(
+        Customer, on_delete=models.PROTECT, related_name='purchase_invoices',
+        verbose_name='تأمین‌کننده',
+    )
+    number = models.PositiveIntegerField(verbose_name='شماره فاکتور خرید')
+    date = models.DateField(verbose_name='تاریخ')
+    description = models.CharField(max_length=500, blank=True, default='', verbose_name='شرح')
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='draft', verbose_name='وضعیت')
+    journal_entry = models.ForeignKey(
+        JournalEntry, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='purchase_invoices', verbose_name='سند حسابداری',
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='purchase_invoices', verbose_name='ثبت‌کننده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-number']
+        verbose_name = 'فاکتور خرید'
+        verbose_name_plural = 'فاکتورهای خرید'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business', 'fiscal_year', 'number'],
+                name='unique_purchase_number_per_year',
+            ),
+        ]
+
+    def __str__(self):
+        return f'خرید {self.number} از {self.supplier}'
+
+    @property
+    def total(self):
+        return sum((line.total for line in self.lines.all()), Decimal(0))
+
+
+class PurchaseLine(models.Model):
+    purchase = models.ForeignKey(
+        PurchaseInvoice, on_delete=models.CASCADE, related_name='lines',
+        verbose_name='فاکتور خرید',
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name='purchase_lines',
+        verbose_name='کالا',
+    )
+    quantity = models.DecimalField(max_digits=14, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))], verbose_name='مقدار')
+    unit_price = models.DecimalField(max_digits=18, decimal_places=0, validators=[MinValueValidator(0)], verbose_name='قیمت واحد خرید')
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'سطر خرید'
+        verbose_name_plural = 'سطرهای خرید'
+
+    @property
+    def total(self):
+        return self.quantity * self.unit_price

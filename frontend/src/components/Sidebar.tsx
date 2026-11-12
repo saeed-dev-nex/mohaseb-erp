@@ -48,6 +48,12 @@ const BASE_NAV_GROUPS: NavGroup[] = [
         icon: "📒",
         module: "accounting",
       },
+      {
+        to: "/inventory",
+        label: "انبار و خرید",
+        icon: "📦",
+        module: "inventory",
+      },
     ],
   },
   {

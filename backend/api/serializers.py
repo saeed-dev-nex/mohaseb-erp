@@ -10,7 +10,8 @@ from .models import (
     Customer, Service, ServicePackage, Invoice, InvoiceItem, InvoicePayment, AuditLog, Document,
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess,
-    Business, FiscalYear, BusinessMembership
+    Business, FiscalYear, BusinessMembership,
+    Product, Warehouse, StockMovement, PurchaseInvoice, PurchaseLine,
 )
 from .validators import validate_customer_documents_path, validate_customer_identifier, validate_national_code_field, validate_tax_id
 from .services.money import invoice_payment_totals, final_amount, office_card_fee, compute_rounding_adjustment, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
@@ -404,11 +405,16 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    product = serializers.PrimaryKeyRelatedField(
+        queryset=Product.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = InvoiceItem
         fields = [
-            'id', 'service', 'service_title', 'service_title_snapshot',
+            'id', 'service', 'product', 'service_title', 'service_title_snapshot',
             'quantity', 'main_price', 'extra_price', 'commission',
             'notes', 'line_total', 'line_commission', 'is_office_card_fee'
         ]
@@ -493,6 +499,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'commission_paid', 'rounding_enabled', 'rounding_amount', 'rounding_target', 'rounding_show_amount',
             'rounding_cleared',
             'paper_size', 'final_amount', 'items', 'created_at', 'updated_at',
+            'inventory_posted', 'sales_journal', 'cogs_journal',
             'edit_request_status', 'can_edit', 'payments', 'paid_amount', 'remaining_amount',
             # vehicle / custom fields
             'vehicle_plate', 'vehicle_vin', 'vehicle_model', 'vehicle_type',
@@ -992,4 +999,114 @@ class JournalEntrySerializer(serializers.ModelSerializer):
             instance.lines.all().delete()
             for line in lines:
                 JournalLine.objects.create(entry=instance, **line)
+        return instance
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — inventory & purchasing (phase 2)
+# ---------------------------------------------------------------------------
+
+
+
+class WarehouseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Warehouse
+        fields = ['id', 'business', 'name', 'is_default', 'is_active', 'created_at']
+        read_only_fields = ['business', 'created_at']
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    current_stock = serializers.SerializerMethodField()
+    stock_value = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'business', 'code', 'name', 'unit', 'barcode',
+            'average_cost', 'sale_price', 'is_active',
+            'current_stock', 'stock_value', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'average_cost', 'created_at', 'updated_at']
+
+    def get_current_stock(self, obj):
+        annotated = getattr(obj, 'stock_qty', None)
+        return annotated if annotated is not None else obj.current_stock
+
+    def get_stock_value(self, obj):
+        stock = self.get_current_stock(obj)
+        return Decimal(stock) * obj.average_cost
+
+
+class StockMovementSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_code = serializers.CharField(source='product.code', read_only=True)
+    kind_display = serializers.CharField(source='get_kind_display', read_only=True)
+    signed_quantity = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StockMovement
+        fields = [
+            'id', 'business', 'product', 'product_name', 'product_code',
+            'warehouse', 'kind', 'kind_display', 'quantity', 'signed_quantity',
+            'unit_cost', 'source_type', 'source_id', 'date', 'note', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_signed_quantity(self, obj):
+        return obj.signed_quantity
+
+
+class PurchaseLineSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_code = serializers.CharField(source='product.code', read_only=True)
+    total = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PurchaseLine
+        fields = ['id', 'product', 'product_name', 'product_code', 'quantity', 'unit_price', 'total']
+
+    def get_total(self, obj):
+        return obj.total
+
+
+class PurchaseInvoiceSerializer(serializers.ModelSerializer):
+    lines = PurchaseLineSerializer(many=True)
+    total = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source='supplier.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = PurchaseInvoice
+        fields = [
+            'id', 'business', 'fiscal_year', 'supplier', 'supplier_name',
+            'number', 'date', 'description', 'status', 'status_display',
+            'journal_entry', 'lines', 'total', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'number', 'status', 'journal_entry', 'created_at', 'updated_at']
+        extra_kwargs = {'fiscal_year': {'required': False}}
+
+    def get_total(self, obj):
+        return obj.total
+
+    def validate_lines(self, lines):
+        if not lines:
+            raise serializers.ValidationError('فاکتور خرید باید دست‌کم یک سطر داشته باشد.')
+        return lines
+
+    def create(self, validated_data):
+        lines = validated_data.pop('lines')
+        purchase = PurchaseInvoice.objects.create(**validated_data)
+        for line in lines:
+            PurchaseLine.objects.create(purchase=purchase, **line)
+        return purchase
+
+    def update(self, instance, validated_data):
+        lines = validated_data.pop('lines', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        if lines is not None:
+            instance.lines.all().delete()
+            for line in lines:
+                PurchaseLine.objects.create(purchase=instance, **line)
         return instance

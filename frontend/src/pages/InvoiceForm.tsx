@@ -21,6 +21,8 @@ import {
   invoiceSettingsAPI,
   documentsAPI,
   servicePackagesAPI,
+  inventoryAPI,
+  type Product,
 } from "../services/api";
 import PriceInput from "../components/PriceInput";
 import JalaliDatePicker from "../components/JalaliDatePicker";
@@ -567,6 +569,16 @@ const InvoiceForm = () => {
   // vehicle trades (services & repair). Without a business context
   // (older installs) keep the base product's behaviour.
   const showVehicle = invoiceProfile ? invoiceProfile.vehicle : true;
+  useEffect(() => {
+    if (!currentBusiness) {
+      setProducts([]);
+      return;
+    }
+    inventoryAPI
+      .products()
+      .then(({ data }) => setProducts(data.filter((p) => p.is_active)))
+      .catch(() => setProducts([]));
+  }, [currentBusiness]);
   const profileExtras = invoiceProfile?.extras ?? [];
   const queryClient = useQueryClient();
   const { data: servicesData } = useServices();
@@ -704,6 +716,15 @@ const InvoiceForm = () => {
     };
   });
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
+  const [productRows, setProductRows] = useState<
+    {
+      _key: number;
+      product: number | "";
+      quantity: number;
+      main_price: number | string;
+    }[]
+  >([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [packages, setPackages] = useState<ServicePackageOption[]>([]);
   const [plateSuggestion, setPlateSuggestion] = useState<any>(null);
   const [plateDismissedFor, setPlateDismissedFor] = useState("");
@@ -788,9 +809,19 @@ const InvoiceForm = () => {
       data.rounding_target != null ? String(data.rounding_target) : "",
     );
     setRoundingClearedNotice(false);
+    setProductRows(
+      (data.items || [])
+        .filter((it: any) => it.product)
+        .map((it: any) => ({
+          _key: Math.random(),
+          product: it.product,
+          quantity: it.quantity || 1,
+          main_price: it.main_price || "",
+        })),
+    );
     setItems(
       (data.items || [])
-        .filter((it: any) => !it.is_office_card_fee)
+        .filter((it: any) => !it.is_office_card_fee && !it.product)
         .map((it: any) => ({
           _key: Math.random(),
           service: it.service || "",
@@ -940,6 +971,7 @@ const InvoiceForm = () => {
           ) {
             setForm(draft.form);
             setItems(draft.items || []);
+            setProductRows(draft.productRows || []);
             setDraftRestored(true);
           }
         }
@@ -957,14 +989,14 @@ const InvoiceForm = () => {
       try {
         localStorage.setItem(
           DRAFT_KEY,
-          JSON.stringify({ form, items, savedAt: Date.now() }),
+          JSON.stringify({ form, items, productRows, savedAt: Date.now() }),
         );
       } catch {
         /* storage full/blocked: autosave is best-effort */
       }
     }, 800);
     return () => clearTimeout(timer);
-  }, [form, items, isEdit]);
+  }, [form, items, productRows, isEdit]);
 
   const handleDiscardDraft = useCallback(() => {
     try {
@@ -1008,13 +1040,18 @@ const InvoiceForm = () => {
   }, [form.green_card_owner_name, form.green_card_owner_national_id]);
 
   // Calculations
-  const subtotal = items.reduce(
-    (s, it) =>
-      s +
-      ((Number(it.main_price) || 0) + (Number(it.extra_price) || 0)) *
-        (Number(it.quantity) || 1),
-    0,
-  );
+  const subtotal =
+    items.reduce(
+      (s, it) =>
+        s +
+        ((Number(it.main_price) || 0) + (Number(it.extra_price) || 0)) *
+          (Number(it.quantity) || 1),
+      0,
+    ) +
+    productRows.reduce(
+      (s, r) => s + (Number(r.main_price) || 0) * (Number(r.quantity) || 1),
+      0,
+    );
   const commissionAmt = Number(form.commission_total || 0);
   const officeCardFee =
     form.card_payment_source === "office" &&
@@ -1097,7 +1134,7 @@ const InvoiceForm = () => {
       setError("لطفاً مشتری را انتخاب کنید");
       return;
     }
-    if (items.length === 0) {
+    if (items.length === 0 && productRows.length === 0) {
       setError("حداقل یک ردیف وارد کنید");
       return;
     }
@@ -1123,15 +1160,33 @@ const InvoiceForm = () => {
       green_card_owner_national_id: form.green_card_owner_national_id || "",
       tags: form.tags || [],
       custom_fields: form.custom_fields || {},
-      items: items.map((it) => ({
-        service: it.service ? Number(it.service) : null,
-        service_title_snapshot: it.service_title_snapshot || "",
-        quantity: Number(it.quantity) || 1,
-        main_price: Number(it.main_price) || 0,
-        extra_price: Number(it.extra_price) || 0,
-        commission: 0,
-        notes: it.notes || "",
-      })),
+      items: [
+        ...items.map((it) => ({
+          service: it.service ? Number(it.service) : null,
+          product: null,
+          service_title_snapshot: it.service_title_snapshot || "",
+          quantity: Number(it.quantity) || 1,
+          main_price: Number(it.main_price) || 0,
+          extra_price: Number(it.extra_price) || 0,
+          commission: 0,
+          notes: it.notes || "",
+        })),
+        ...productRows
+          .filter((r) => r.product !== "")
+          .map((r) => {
+            const product = products.find((p) => p.id === r.product);
+            return {
+              service: null,
+              product: Number(r.product),
+              service_title_snapshot: product?.name || "",
+              quantity: Number(r.quantity) || 1,
+              main_price: Number(r.main_price) || 0,
+              extra_price: 0,
+              commission: 0,
+              notes: "",
+            };
+          }),
+      ],
     };
     try {
       if (isEdit) {
@@ -1584,6 +1639,105 @@ const InvoiceForm = () => {
             </button>
           </div>
         </Section>
+
+        {/* Product (inventory) lines — ERP phase 2 */}
+        {products.length > 0 && (
+          <Section title={`کالاهای فروش (${productRows.length})`} icon="📦">
+            <div className="space-y-2">
+              {productRows.map((row, idx) => (
+                <div
+                  key={row._key}
+                  className="grid grid-cols-12 gap-2 items-center"
+                >
+                  <select
+                    className={`${selectCls} col-span-5`}
+                    value={row.product}
+                    onChange={(e) => {
+                      const product = products.find(
+                        (p) => p.id === Number(e.target.value),
+                      );
+                      const next = [...productRows];
+                      next[idx] = {
+                        ...row,
+                        product: e.target.value ? Number(e.target.value) : "",
+                        main_price: product
+                          ? product.sale_price || ""
+                          : row.main_price,
+                      };
+                      setProductRows(next);
+                    }}
+                  >
+                    <option value="">انتخاب کالا…</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} — {p.name} (موجودی: {fmt(p.current_stock)})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className={`${inputCls} col-span-2`}
+                    type="number"
+                    min={1}
+                    placeholder="تعداد"
+                    value={row.quantity}
+                    onChange={(e) => {
+                      const next = [...productRows];
+                      next[idx] = {
+                        ...row,
+                        quantity: Number(e.target.value) || 1,
+                      };
+                      setProductRows(next);
+                    }}
+                  />
+                  <input
+                    className={`${inputCls} col-span-4`}
+                    placeholder="قیمت فروش واحد"
+                    inputMode="numeric"
+                    value={row.main_price}
+                    onChange={(e) => {
+                      const next = [...productRows];
+                      next[idx] = {
+                        ...row,
+                        main_price: e.target.value.replace(/[^0-9]/g, ""),
+                      };
+                      setProductRows(next);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="col-span-1 text-rose-300 text-sm"
+                    onClick={() =>
+                      setProductRows(productRows.filter((_, i) => i !== idx))
+                    }
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="text-blue-300 text-sm"
+                onClick={() =>
+                  setProductRows([
+                    ...productRows,
+                    {
+                      _key: Math.random(),
+                      product: "",
+                      quantity: 1,
+                      main_price: "",
+                    },
+                  ])
+                }
+              >
+                + افزودن کالا
+              </button>
+              <p className="text-xs text-slate-500">
+                با ثبت فاکتور، خروج کالا از انبار و سند فروش و بهای تمام‌شده
+                به‌صورت خودکار ثبت می‌شود.
+              </p>
+            </div>
+          </Section>
+        )}
 
         {form.card_payment_source === "office" && officeCardFee > 0 && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">

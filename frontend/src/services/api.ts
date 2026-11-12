@@ -545,6 +545,78 @@ export const accountingAPI = {
     }),
 };
 
+// ---- Inventory & purchasing (ERP phase 2) ----
+export interface Warehouse {
+  id: number;
+  business: number;
+  name: string;
+  is_default: boolean;
+  is_active: boolean;
+}
+
+export interface Product {
+  id: number;
+  business: number;
+  code: string;
+  name: string;
+  unit: string;
+  barcode: string;
+  average_cost: number;
+  sale_price: number;
+  is_active: boolean;
+  current_stock: number;
+  stock_value: number;
+}
+
+export interface PurchaseLine {
+  id?: number;
+  product: number;
+  product_name?: string;
+  product_code?: string;
+  quantity: number;
+  unit_price: number;
+  total?: number;
+}
+
+export interface PurchaseInvoice {
+  id: number;
+  business: number;
+  fiscal_year: number;
+  supplier: number;
+  supplier_name: string;
+  number: number;
+  date: string;
+  description: string;
+  status: "draft" | "posted";
+  status_display: string;
+  journal_entry: number | null;
+  lines: PurchaseLine[];
+  total: number;
+}
+
+export const inventoryAPI = {
+  warehouses: () => api.get<Warehouse[]>("warehouses/"),
+  products: () => api.get<Product[]>("products/"),
+  createProduct: (data: Partial<Product>) =>
+    api.post<Product>("products/", data),
+  updateProduct: (id: number, data: Partial<Product>) =>
+    api.patch<Product>(`products/${id}/`, data),
+  deleteProduct: (id: number) => api.delete(`products/${id}/`),
+  purchases: () => api.get("purchases/"),
+  createPurchase: (data: Payload) =>
+    api.post<PurchaseInvoice>("purchases/", data),
+  updatePurchase: (id: number, data: Payload) =>
+    api.put<PurchaseInvoice>(`purchases/${id}/`, data),
+  deletePurchase: (id: number) => api.delete(`purchases/${id}/`),
+  postPurchase: (id: number) =>
+    api.post<PurchaseInvoice>(`purchases/${id}/post/`, {}),
+  unpostPurchase: (id: number) =>
+    api.post<PurchaseInvoice>(`purchases/${id}/unpost/`, {}),
+  kardex: (product: number) =>
+    api.get("inventory/kardex/", { params: { product } }),
+  adjust: (data: Payload) => api.post("inventory/adjust/", data),
+};
+
 // ---- User Management (admin only) ----
 export const usersAPI = {
   list: () => api.get("users/"),

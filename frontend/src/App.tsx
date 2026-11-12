@@ -26,6 +26,7 @@ const UsersPage = lazy(() => import("./pages/UsersPage"));
 const UserPerformancePage = lazy(() => import("./pages/UserPerformancePage"));
 const Chat = lazy(() => import("./pages/Chat"));
 const AccountingPage = lazy(() => import("./pages/AccountingPage"));
+const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const Layout = lazy(() => import("./components/Layout"));
 
 const PageLoader = () => (
@@ -178,6 +179,16 @@ function App() {
               element={
                 <ModuleRoute module="accounting">
                   <AccountingPage />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Inventory & purchasing (ERP phase 2) */}
+            <Route
+              path="inventory"
+              element={
+                <ModuleRoute module="inventory">
+                  <InventoryPage />
                 </ModuleRoute>
               }
             />

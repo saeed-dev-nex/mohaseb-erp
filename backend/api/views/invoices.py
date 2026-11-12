@@ -109,6 +109,33 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             **extra,
         )
         record_audit(user=self.request.user, instance=invoice, action='create', after=snapshot(invoice))
+        # ERP phase 2: a sales invoice carrying product lines posts its
+        # stock-outs and auto-journals (revenue + COGS) immediately.
+        if business is not None and invoice.items.filter(product__isnull=False).exists():
+            from ..services.inventory import post_sale
+            post_sale(invoice, user=self.request.user)
+
+    @action(detail=True, methods=['post'], url_path='post-inventory')
+    def post_inventory(self, request, pk=None):
+        from ..services.inventory import post_sale
+
+        invoice = self.get_object()
+        try:
+            post_sale(invoice, user=request.user)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(invoice).data)
+
+    @action(detail=True, methods=['post'], url_path='unpost-inventory')
+    def unpost_inventory(self, request, pk=None):
+        from ..services.inventory import unpost_sale
+
+        invoice = self.get_object()
+        try:
+            unpost_sale(invoice)
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(invoice).data)
 
     def perform_destroy(self, instance):
         before = snapshot(instance)
