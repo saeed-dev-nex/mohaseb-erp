@@ -130,3 +130,67 @@ class BusinessScopingTests(TestCase):
         # Header ignored for a non-member: the full (unscoped) list comes back
         # rather than the business's data being confirmed/filtered by it.
         self.assertEqual(len(rows), 3)
+
+
+class TemplateDepthTests(TestCase):
+    """Per-trade invoice profiles and starter catalogs (phase 0.5)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username='tpl-admin', password='admin' + '-pass-12345')
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def test_gas_station_template_registered_with_profile(self):
+        response = self.client.get('/api/business-templates/')
+        by_key = {item['key']: item for item in response.data}
+        self.assertIn('gas_station', by_key)
+        gas = by_key['gas_station']
+        self.assertEqual(gas['title'], 'پمپ بنزین و جایگاه سوخت')
+        extra_keys = [e['key'] for e in gas['invoice_profile']['extras']]
+        self.assertEqual(extra_keys, ['liters', 'nozzle', 'plate'])
+        titles = [c['title'] for c in gas['catalog']]
+        self.assertIn('بنزین معمولی', titles)
+        self.assertIn('گازوئیل', titles)
+
+    def test_repair_template_has_vehicle_profile(self):
+        response = self.client.get('/api/business-templates/')
+        by_key = {item['key']: item for item in response.data}
+        self.assertTrue(by_key['services_repair']['invoice_profile']['vehicle'])
+        self.assertFalse(by_key['restaurant']['invoice_profile']['vehicle'])
+
+    def test_create_gas_station_business_seeds_fuel_catalog(self):
+        from ..models import Service
+
+        response = self.client.post(
+            '/api/businesses/',
+            {'name': 'جایگاه تست', 'template_key': 'gas_station', 'person_type': 'legal'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        business = Business.objects.get(name='جایگاه تست')
+        titles = set(Service.objects.filter(business=business).values_list('title', flat=True))
+        self.assertIn('بنزین سوپر', titles)
+        self.assertEqual(len(titles), 6)
+        self.assertEqual(response.data['invoice_profile']['extras'][0]['key'], 'liters')
+
+    def test_apply_catalog_is_idempotent(self):
+        business = Business.objects.create(name='رستوران تست', template_key='restaurant')
+        BusinessMembership.objects.create(user=self.admin, business=business, role='owner')
+        first = self.client.post(f'/api/businesses/{business.id}/apply-catalog/', {}, format='json')
+        self.assertEqual(first.status_code, 200, first.content)
+        self.assertEqual(first.data['created'], 6)
+        second = self.client.post(f'/api/businesses/{business.id}/apply-catalog/', {}, format='json')
+        self.assertEqual(second.data['created'], 0)
+        self.assertEqual(second.data['existing'], 6)
+
+    def test_services_scoped_by_business_header(self):
+        from ..models import Service
+
+        b1 = Business.objects.create(name='فروشگاه یک', template_key='retail')
+        b2 = Business.objects.create(name='فروشگاه دو', template_key='retail')
+        Service.objects.create(title='کالای یک', business=b1)
+        Service.objects.create(title='کالای دو', business=b2)
+        response = self.client.get('/api/services/', HTTP_X_BUSINESS_ID=str(b1.id))
+        rows = response.data['results'] if isinstance(response.data, dict) else response.data
+        titles = [row['title'] for row in rows]
+        self.assertEqual(titles, ['کالای یک'])

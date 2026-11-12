@@ -28,6 +28,7 @@ import SearchableSelect from "../components/SearchableSelect";
 import { toPersianKeyboard } from "../utils/persian";
 import { computeRoundingAdjustment } from "../utils/money";
 import { isMotoPlate } from "../lib/vehicle";
+import { useBusiness } from "../lib/business";
 import { hideWaiting, showWaiting } from "../lib/waiting";
 import { VehicleInfoFields } from "../components/VehicleInfoFields";
 import { Field, Section, inputCls, selectCls } from "../components/FormSection";
@@ -121,6 +122,7 @@ type InvoiceFormState = {
   green_card_owner_name: string;
   green_card_owner_national_id: string;
   tags: string[];
+  custom_fields: Record<string, string>;
 };
 
 type NewCustomerData = {
@@ -559,6 +561,13 @@ const InvoiceForm = () => {
   // «صدور مشابه»: /invoices/new?clone=<id> prefills the form from that invoice.
   const cloneId = !isEdit ? searchParams.get("clone") : null;
   const navigate = useNavigate();
+  const { current: currentBusiness } = useBusiness();
+  const invoiceProfile = currentBusiness?.invoice_profile;
+  // Trades differ by template: the vehicle block exists only for
+  // vehicle trades (services & repair). Without a business context
+  // (older installs) keep the base product's behaviour.
+  const showVehicle = invoiceProfile ? invoiceProfile.vehicle : true;
+  const profileExtras = invoiceProfile?.extras ?? [];
   const queryClient = useQueryClient();
   const { data: servicesData } = useServices();
   const services = (servicesData ?? []) as ServiceOption[];
@@ -691,6 +700,7 @@ const InvoiceForm = () => {
       green_card_owner_name: "",
       green_card_owner_national_id: "",
       tags: [],
+      custom_fields: {},
     };
   });
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
@@ -764,6 +774,7 @@ const InvoiceForm = () => {
       green_card_owner_name: data.green_card_owner_name || "",
       green_card_owner_national_id: data.green_card_owner_national_id || "",
       tags: data.tags || [],
+      custom_fields: data.custom_fields || {},
     });
     // Remember the loaded rounding rule so amount changes can drop a
     // stale manual target (a clone carries the same amounts, so the
@@ -984,6 +995,7 @@ const InvoiceForm = () => {
       green_card_owner_name: "",
       green_card_owner_national_id: "",
       tags: [],
+      custom_fields: {},
     });
     setItems([]);
     setDraftRestored(false);
@@ -1110,6 +1122,7 @@ const InvoiceForm = () => {
       green_card_owner_name: form.green_card_owner_name || "",
       green_card_owner_national_id: form.green_card_owner_national_id || "",
       tags: form.tags || [],
+      custom_fields: form.custom_fields || {},
       items: items.map((it) => ({
         service: it.service ? Number(it.service) : null,
         service_title_snapshot: it.service_title_snapshot || "",
@@ -1373,86 +1386,143 @@ const InvoiceForm = () => {
           </div>
         </Section>
 
-        {/* Vehicle */}
-        <VehicleInfoFields
-          values={{
-            vehicle_plate: form.vehicle_plate,
-            vehicle_vin: form.vehicle_vin,
-            vehicle_model: form.vehicle_model,
-            vehicle_type: form.vehicle_type,
-            vehicle_year: form.vehicle_year,
-          }}
-          onPlateChange={(v) => {
-            const wasMoto = isMotoPlate(form.vehicle_plate || "");
-            const isMotoNow = isMotoPlate(v || "");
-            // Atomically update both fields to avoid stale-closure double-setState bug
-            setForm((f) => ({
-              ...f,
-              vehicle_plate: v,
-              ...(wasMoto !== isMotoNow ? { vehicle_type: "" } : {}),
-            }));
-          }}
-          onFieldChange={(name, value) => setField(name, value)}
-          vehicleTypes={vehicleTypes}
-          onCreateVehicleType={handleCreateVehicleType}
-          creatingVehicleType={creatingVehicleType}
-          plateSuggestion={plateSuggestion}
-          onUsePlateSuggestion={handleUsePlateSuggestion}
-          onDismissPlateSuggestion={() =>
-            setPlateDismissedFor((form.vehicle_plate || "").trim())
-          }
-          formatAmount={fmt}
-        />
+        {showVehicle && (
+          <>
+            {/* Vehicle */}
+            <VehicleInfoFields
+              values={{
+                vehicle_plate: form.vehicle_plate,
+                vehicle_vin: form.vehicle_vin,
+                vehicle_model: form.vehicle_model,
+                vehicle_type: form.vehicle_type,
+                vehicle_year: form.vehicle_year,
+              }}
+              onPlateChange={(v) => {
+                const wasMoto = isMotoPlate(form.vehicle_plate || "");
+                const isMotoNow = isMotoPlate(v || "");
+                // Atomically update both fields to avoid stale-closure double-setState bug
+                setForm((f) => ({
+                  ...f,
+                  vehicle_plate: v,
+                  ...(wasMoto !== isMotoNow ? { vehicle_type: "" } : {}),
+                }));
+              }}
+              onFieldChange={(name, value) => setField(name, value)}
+              vehicleTypes={vehicleTypes}
+              onCreateVehicleType={handleCreateVehicleType}
+              creatingVehicleType={creatingVehicleType}
+              plateSuggestion={plateSuggestion}
+              onUsePlateSuggestion={handleUsePlateSuggestion}
+              onDismissPlateSuggestion={() =>
+                setPlateDismissedFor((form.vehicle_plate || "").trim())
+              }
+              formatAmount={fmt}
+            />
 
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setShowGreenCard((v) => !v)}
-            className="w-full flex items-center gap-2 px-6 py-4 bg-slate-700/20 hover:bg-slate-700/30 transition-colors text-right"
-            aria-expanded={showGreenCard}
-          >
-            <span className="text-lg">🪪</span>
-            <h3 className="text-white font-semibold text-sm">صاحب برگ سبز</h3>
-            <span className="text-[11px] text-slate-500">(اختیاری)</span>
-            <span className="mr-auto text-slate-400 text-xs">
-              {showGreenCard ? "▾ بستن" : "▸ باز کردن"}
-            </span>
-          </button>
-          {showGreenCard && (
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="نام مندرج روی برگ سبز">
-                  <input
-                    type="text"
-                    value={form.green_card_owner_name}
-                    onChange={(e) =>
-                      setField(
-                        "green_card_owner_name",
-                        toPersianKeyboard(e.target.value),
-                      )
-                    }
-                    className={inputCls}
-                    placeholder="نام صاحب خودرو"
-                    maxLength={255}
-                  />
-                </Field>
-                <Field label="کد ملی صاحب خودرو">
-                  <input
-                    type="text"
-                    value={form.green_card_owner_national_id}
-                    onChange={(e) =>
-                      setField("green_card_owner_national_id", e.target.value)
-                    }
-                    className={inputCls}
-                    placeholder="کد ملی"
-                    dir="ltr"
-                    maxLength={20}
-                  />
-                </Field>
-              </div>
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowGreenCard((v) => !v)}
+                className="w-full flex items-center gap-2 px-6 py-4 bg-slate-700/20 hover:bg-slate-700/30 transition-colors text-right"
+                aria-expanded={showGreenCard}
+              >
+                <span className="text-lg">🪪</span>
+                <h3 className="text-white font-semibold text-sm">
+                  صاحب برگ سبز
+                </h3>
+                <span className="text-[11px] text-slate-500">(اختیاری)</span>
+                <span className="mr-auto text-slate-400 text-xs">
+                  {showGreenCard ? "▾ بستن" : "▸ باز کردن"}
+                </span>
+              </button>
+              {showGreenCard && (
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="نام مندرج روی برگ سبز">
+                      <input
+                        type="text"
+                        value={form.green_card_owner_name}
+                        onChange={(e) =>
+                          setField(
+                            "green_card_owner_name",
+                            toPersianKeyboard(e.target.value),
+                          )
+                        }
+                        className={inputCls}
+                        placeholder="نام صاحب خودرو"
+                        maxLength={255}
+                      />
+                    </Field>
+                    <Field label="کد ملی صاحب خودرو">
+                      <input
+                        type="text"
+                        value={form.green_card_owner_national_id}
+                        onChange={(e) =>
+                          setField(
+                            "green_card_owner_national_id",
+                            e.target.value,
+                          )
+                        }
+                        className={inputCls}
+                        placeholder="کد ملی"
+                        dir="ltr"
+                        maxLength={20}
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
+
+        {profileExtras.length > 0 && (
+          <Section title="اطلاعات تکمیلی فاکتور" icon="🧩">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {profileExtras.map((extra) => (
+                <Field key={extra.key} label={extra.label}>
+                  {extra.type === "select" ? (
+                    <select
+                      className={inputCls}
+                      value={form.custom_fields[extra.key] || ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          custom_fields: {
+                            ...f.custom_fields,
+                            [extra.key]: e.target.value,
+                          },
+                        }))
+                      }
+                    >
+                      <option value="">—</option>
+                      {(extra.options || []).map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={extra.type === "number" ? "number" : "text"}
+                      className={inputCls}
+                      value={form.custom_fields[extra.key] || ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          custom_fields: {
+                            ...f.custom_fields,
+                            [extra.key]: e.target.value,
+                          },
+                        }))
+                      }
+                    />
+                  )}
+                </Field>
+              ))}
+            </div>
+          </Section>
+        )}
 
         {/* Items */}
         <Section title={`ردیف‌های فاکتور (${items.length})`} icon="🧾">

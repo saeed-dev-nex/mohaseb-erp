@@ -22,7 +22,7 @@ from ..models import Business, BusinessMembership
 from ..serializers import (
     BusinessMembershipSerializer, BusinessSerializer, FiscalYearSerializer,
 )
-from ..services.business_setup import create_default_fiscal_year
+from ..services.business_setup import create_default_fiscal_year, seed_template_catalog
 
 MANAGE_ROLES = ('owner', 'manager')
 
@@ -69,6 +69,7 @@ class BusinessViewSet(viewsets.ModelViewSet):
             user=request.user, business=business, role='owner', is_default=False,
         )
         create_default_fiscal_year(business)
+        seed_template_catalog(business)
         return Response(
             self.get_serializer(business).data, status=status.HTTP_201_CREATED,
         )
@@ -89,6 +90,13 @@ class BusinessViewSet(viewsets.ModelViewSet):
         business.is_active = False
         business.save(update_fields=['is_active', 'updated_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'], url_path='apply-catalog')
+    def apply_catalog(self, request, pk=None):
+        """Seed (or top up) this business's catalog from its template."""
+        business = self.get_object()
+        self._require_manage(business)
+        return Response(seed_template_catalog(business))
 
     @action(detail=True, methods=['get'], url_path='modules')
     def modules(self, request, pk=None):

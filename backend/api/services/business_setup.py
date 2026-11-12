@@ -61,3 +61,30 @@ def ensure_default_business():
             defaults={'role': role, 'is_default': True},
         )
     return business
+
+
+def seed_template_catalog(business):
+    """Seed the business's services/items from its job template.
+
+    Idempotent: a catalog entry is created only when the business has
+    no service with the same title, so re-applying never duplicates
+    and never touches prices the user has since set. Returns
+    {'created': n, 'existing': m}.
+    """
+    from ..business_templates import template_catalog
+    from ..models import Service
+
+    created = 0
+    existing = 0
+    for entry in template_catalog(business.template_key):
+        title = entry['title']
+        if Service.objects.filter(business=business, title=title).exists():
+            existing += 1
+            continue
+        Service.objects.create(
+            business=business,
+            title=title,
+            default_main_price=entry.get('default_main_price') or 0,
+        )
+        created += 1
+    return {'created': created, 'existing': existing}

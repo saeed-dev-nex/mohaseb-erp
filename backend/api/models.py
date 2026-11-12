@@ -80,6 +80,11 @@ class Customer(models.Model):
 
 
 class Service(models.Model):
+    # ERP dimension (phase 0.5): the services/items catalog is per business.
+    business = models.ForeignKey(
+        'Business', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='business_services', verbose_name='کسب‌وکار',
+    )
     title = models.CharField(max_length=255, verbose_name='عنوان')
     description = models.TextField(blank=True, null=True, verbose_name='توضیحات')
     has_extra = models.BooleanField(default=False, verbose_name='دارای خدمت اضافه')

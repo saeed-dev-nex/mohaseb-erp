@@ -35,6 +35,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
+from ..business_context import resolve_business
 from ..pagination import OptionalPageNumberPagination
 
 
@@ -82,7 +83,18 @@ class ServiceViewSet(viewsets.ModelViewSet):
         active_only = self.request.query_params.get('active', None)
         if active_only == 'true':
             qs = qs.filter(is_active=True)
+        # ERP: scope the catalog to the caller's current business.
+        business = resolve_business(self.request)
+        if business is not None:
+            qs = qs.filter(business=business)
         return qs
+
+    def perform_create(self, serializer):
+        business = resolve_business(self.request)
+        extra = {}
+        if business is not None:
+            extra['business'] = business
+        serializer.save(**extra)
 
 class VehicleTypeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, HasModuleAccess]

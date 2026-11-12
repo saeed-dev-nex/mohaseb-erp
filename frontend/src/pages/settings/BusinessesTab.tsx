@@ -55,6 +55,7 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
     username: "",
     role: "operator",
   });
+  const [catalogMsg, setCatalogMsg] = useState("");
 
   const loadBusinesses = useCallback(async () => {
     try {
@@ -151,6 +152,19 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
       setError(
         "افزودن عضو انجام نشد. نام کاربری باید دقیقاً نام یک کاربر موجود باشد.",
       );
+    }
+  };
+
+  const applyCatalog = async () => {
+    if (!selected) return;
+    setCatalogMsg("");
+    try {
+      const { data } = await businessesAPI.applyCatalog(selected.id);
+      setCatalogMsg(
+        `کاتالوگ قالب اعمال شد: ${faNum(data.created)} قلم تازه ساخته شد و ${faNum(data.existing)} قلم از قبل بود.`,
+      );
+    } catch {
+      setCatalogMsg("اعمال کاتالوگ انجام نشد.");
     }
   };
 
@@ -277,6 +291,43 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
 
       {selected && (
         <>
+          <Section
+            title={`پروفایل فاکتور و کاتالوگ — ${selected.name}`}
+            icon="🧾"
+          >
+            <p className="text-sm text-slate-300">
+              قالب «{selected.template_title}» تعیین می‌کند فاکتور این کسب‌وکار
+              چه شکلی باشد:{" "}
+              {selected.invoice_profile.vehicle
+                ? "بلوک مشخصات خودرو دارد"
+                : "بلوک خودرو ندارد"}
+              {selected.invoice_profile.extras.length > 0 && (
+                <>
+                  {" "}
+                  و فیلدهای اختصاصی آن عبارت‌اند از:{" "}
+                  {selected.invoice_profile.extras
+                    .map((extra) => extra.label)
+                    .join("، ")}
+                  .
+                </>
+              )}
+            </p>
+            <p className="text-xs text-slate-400 mt-2">
+              کاتالوگ آغازین قالب (خدمات/کالاهای آماده) هنگام ساخت کسب‌وکار
+              ساخته می‌شود؛ با دکمهٔ زیر می‌توانید اقلام جاافتاده را دوباره
+              اضافه کنید — اقلام موجود و قیمت‌هایشان دست نمی‌خورند.
+            </p>
+            <button
+              onClick={applyCatalog}
+              className="mt-3 px-4 py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded-xl transition-all"
+            >
+              اعمال کاتالوگ قالب
+            </button>
+            {catalogMsg && (
+              <p className="text-xs text-emerald-300 mt-2">{catalogMsg}</p>
+            )}
+          </Section>
+
           <Section title={`سال‌های مالی — ${selected.name}`} icon="📅">
             <div className="space-y-2 mb-4">
               {years.length === 0 && (

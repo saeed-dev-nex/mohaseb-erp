@@ -317,12 +317,25 @@ export interface FiscalYear {
   is_closed: boolean;
 }
 
+export interface InvoiceExtraField {
+  key: string;
+  label: string;
+  type: "text" | "number" | "select";
+  options?: string[];
+}
+
+export interface InvoiceProfile {
+  vehicle: boolean;
+  extras: InvoiceExtraField[];
+}
+
 export interface Business {
   id: number;
   name: string;
   template_key: string;
   template_title: string;
   terminology: Record<string, string>;
+  invoice_profile: InvoiceProfile;
   person_type: "legal" | "individual";
   legal_name: string;
   national_id: string;
@@ -342,6 +355,8 @@ export interface BusinessTemplate {
   description: string;
   modules: string[];
   terminology: Record<string, string>;
+  invoice_profile: InvoiceProfile;
+  catalog: { title: string; default_main_price: number }[];
 }
 
 export const businessesAPI = {
@@ -352,6 +367,11 @@ export const businessesAPI = {
     api.get<FiscalYear[]>(`businesses/${businessId}/fiscal-years/`),
   addFiscalYear: (businessId: number, data: Partial<FiscalYear>) =>
     api.post<FiscalYear>(`businesses/${businessId}/fiscal-years/`, data),
+  applyCatalog: (businessId: number) =>
+    api.post<{ created: number; existing: number }>(
+      `businesses/${businessId}/apply-catalog/`,
+      {},
+    ),
   members: (businessId: number) => api.get(`businesses/${businessId}/members/`),
   addMember: (businessId: number, data: { username: string; role: string }) =>
     api.post(`businesses/${businessId}/members/`, data),
