@@ -28,6 +28,8 @@ const Chat = lazy(() => import("./pages/Chat"));
 const AccountingPage = lazy(() => import("./pages/AccountingPage"));
 const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const PayrollPage = lazy(() => import("./pages/PayrollPage"));
+const TaxPage = lazy(() => import("./pages/TaxPage"));
+const AssetsPage = lazy(() => import("./pages/AssetsPage"));
 const Layout = lazy(() => import("./components/Layout"));
 
 const PageLoader = () => (
@@ -200,6 +202,26 @@ function App() {
               element={
                 <ModuleRoute module="payroll">
                   <PayrollPage />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Tax (ERP phase 4) */}
+            <Route
+              path="tax"
+              element={
+                <ModuleRoute module="tax">
+                  <TaxPage />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Fixed assets (ERP phase 4) */}
+            <Route
+              path="assets"
+              element={
+                <ModuleRoute module="assets">
+                  <AssetsPage />
                 </ModuleRoute>
               }
             />

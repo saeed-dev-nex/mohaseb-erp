@@ -60,6 +60,18 @@ const BASE_NAV_GROUPS: NavGroup[] = [
         icon: "💵",
         module: "payroll",
       },
+      {
+        to: "/tax",
+        label: "مالیات",
+        icon: "🧾",
+        module: "tax",
+      },
+      {
+        to: "/assets",
+        label: "دارایی‌ها",
+        icon: "🏢",
+        module: "assets",
+      },
     ],
   },
   {

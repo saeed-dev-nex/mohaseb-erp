@@ -13,6 +13,7 @@ from .models import (
     Business, FiscalYear, BusinessMembership,
     Product, Warehouse, StockMovement, PurchaseInvoice, PurchaseLine,
     EmploymentProfile, PayrollPeriod, PayrollSettings, Payslip,
+    TaxSettings, MoadianSubmission, FixedAsset, DepreciationRun, DepreciationLine,
 )
 from .validators import validate_customer_documents_path, validate_customer_identifier, validate_national_code_field, validate_tax_id
 from .services.money import invoice_payment_totals, final_amount, office_card_fee, compute_rounding_adjustment, MAX_INVOICE_AMOUNT, MAX_ITEM_AMOUNT
@@ -1081,7 +1082,7 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'business', 'fiscal_year', 'supplier', 'supplier_name',
             'number', 'date', 'description', 'status', 'status_display',
-            'journal_entry', 'lines', 'total', 'created_at', 'updated_at',
+            'vat_amount', 'journal_entry', 'lines', 'total', 'created_at', 'updated_at',
         ]
         read_only_fields = ['business', 'number', 'status', 'journal_entry', 'created_at', 'updated_at']
         extra_kwargs = {'fiscal_year': {'required': False}}
@@ -1197,3 +1198,78 @@ class PayrollPeriodSerializer(serializers.ModelSerializer):
             'insurance_employee': sum((s.insurance_employee for s in slips), _D(0)),
             'insurance_employer': sum((s.insurance_employer for s in slips), _D(0)),
         }
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — tax & fixed assets (phase 4)
+# ---------------------------------------------------------------------------
+
+
+
+class TaxSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxSettings
+        fields = ['id', 'business', 'is_vat_registered', 'vat_rate', 'economic_code', 'updated_at']
+        read_only_fields = ['business', 'updated_at']
+
+
+class MoadianSubmissionSerializer(serializers.ModelSerializer):
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True)
+    customer_name = serializers.CharField(source='invoice.customer.name', read_only=True, default='')
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = MoadianSubmission
+        fields = [
+            'id', 'business', 'invoice', 'invoice_number', 'customer_name',
+            'status', 'status_display', 'unique_id', 'note', 'submitted_at',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'created_at', 'updated_at']
+
+
+class FixedAssetSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    monthly_depreciation = serializers.SerializerMethodField()
+    book_value = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FixedAsset
+        fields = [
+            'id', 'business', 'code', 'name', 'category', 'category_display',
+            'purchase_date', 'cost', 'salvage_value', 'useful_life_years',
+            'accumulated_depreciation', 'depreciated_months',
+            'monthly_depreciation', 'book_value', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'business', 'accumulated_depreciation', 'depreciated_months',
+            'created_at', 'updated_at',
+        ]
+
+    def get_monthly_depreciation(self, obj):
+        return obj.monthly_depreciation
+
+    def get_book_value(self, obj):
+        return obj.book_value
+
+
+class DepreciationLineSerializer(serializers.ModelSerializer):
+    asset_name = serializers.CharField(source='asset.name', read_only=True)
+    asset_code = serializers.CharField(source='asset.code', read_only=True)
+
+    class Meta:
+        model = DepreciationLine
+        fields = ['id', 'asset', 'asset_name', 'asset_code', 'amount']
+
+
+class DepreciationRunSerializer(serializers.ModelSerializer):
+    lines = DepreciationLineSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DepreciationRun
+        fields = [
+            'id', 'business', 'year', 'month', 'total_amount',
+            'journal_entry', 'lines', 'created_at',
+        ]
+        read_only_fields = fields

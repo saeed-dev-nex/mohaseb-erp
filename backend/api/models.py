@@ -771,6 +771,8 @@ class UserModuleAccess(models.Model):
     accounting = models.BooleanField(default=True, verbose_name='حسابداری')
     inventory = models.BooleanField(default=True, verbose_name='انبار')
     payroll = models.BooleanField(default=True, verbose_name='حقوق و دستمزد')
+    tax = models.BooleanField(default=True, verbose_name='مالیات')
+    assets = models.BooleanField(default=True, verbose_name='دارایی‌ها')
     settings = models.BooleanField(default=True, verbose_name='تنظیمات')
     users = models.BooleanField(default=True, verbose_name='مدیریت کاربران')
     backup = models.BooleanField(default=True, verbose_name='بکاپ')
@@ -1241,6 +1243,7 @@ class PurchaseInvoice(models.Model):
     date = models.DateField(verbose_name='تاریخ')
     description = models.CharField(max_length=500, blank=True, default='', verbose_name='شرح')
     status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='draft', verbose_name='وضعیت')
+    vat_amount = models.DecimalField(max_digits=18, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='مالیات بر ارزش افزودهٔ خرید')
     journal_entry = models.ForeignKey(
         JournalEntry, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='purchase_invoices', verbose_name='سند حسابداری',
@@ -1469,3 +1472,171 @@ class Payslip(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['period', 'profile'], name='unique_payslip_per_period'),
         ]
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — tax & fixed assets (phase 4)
+#
+# VAT is reported per Jalali quarter from sales invoices (output) and
+# purchase invoices (input); seasonal transactions (مادهٔ ۱۶۹) aggregate
+# per counterparty. The مؤدیان side is a submission queue with manual
+# status tracking — the live connection stays a provider decision.
+# Fixed assets depreciate straight-line, one month per run, with an
+# auto-journal into هزینهٔ استهلاک / استهلاک انباشته.
+# ---------------------------------------------------------------------------
+
+class TaxSettings(models.Model):
+    """تنظیمات مالیاتی هر کسب‌وکار."""
+
+    business = models.OneToOneField(
+        Business, on_delete=models.CASCADE, related_name='tax_settings',
+        verbose_name='کسب‌وکار',
+    )
+    is_vat_registered = models.BooleanField(default=True, verbose_name='مشمول ارزش افزوده')
+    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('10'), verbose_name='نرخ ارزش افزوده (درصد)')
+    economic_code = models.CharField(max_length=32, blank=True, default='', verbose_name='کد اقتصادی')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'تنظیمات مالیاتی'
+        verbose_name_plural = 'تنظیمات مالیاتی'
+
+
+class MoadianSubmission(models.Model):
+    """صف ارسال صورتحساب به سامانهٔ مؤدیان (وضعیت‌ها دستی ثبت می‌شوند)."""
+
+    STATUS_CHOICES = [
+        ('queued', 'در صف ارسال'),
+        ('sent', 'ارسال شده'),
+        ('failed', 'ناموفق'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='moadian_submissions',
+        verbose_name='کسب‌وکار',
+    )
+    invoice = models.ForeignKey(
+        Invoice, on_delete=models.CASCADE, related_name='moadian_submissions',
+        verbose_name='فاکتور',
+    )
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='queued', verbose_name='وضعیت')
+    unique_id = models.CharField(max_length=32, blank=True, default='', verbose_name='شناسهٔ یکتای مالیاتی')
+    note = models.CharField(max_length=500, blank=True, default='', verbose_name='توضیح / پاسخ سامانه')
+    submitted_at = models.DateTimeField(null=True, blank=True, verbose_name='زمان ارسال')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'ارسال مؤدیان'
+        verbose_name_plural = 'ارسال‌های مؤدیان'
+
+
+class FixedAsset(models.Model):
+    """دارایی ثابت — استهلاک خط مستقیم ماهانه."""
+
+    CATEGORY_CHOICES = [
+        ('land', 'زمین'),
+        ('building', 'ساختمان'),
+        ('machinery', 'ماشین‌آلات'),
+        ('vehicle', 'وسایل نقلیه'),
+        ('equipment', 'تجهیزات و اثاثه'),
+        ('software', 'نرم‌افزار'),
+        ('other', 'سایر'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='fixed_assets',
+        verbose_name='کسب‌وکار',
+    )
+    code = models.CharField(max_length=64, verbose_name='کد دارایی')
+    name = models.CharField(max_length=255, verbose_name='نام دارایی')
+    category = models.CharField(max_length=16, choices=CATEGORY_CHOICES, default='equipment', verbose_name='گروه دارایی')
+    purchase_date = models.DateField(verbose_name='تاریخ خرید')
+    cost = models.DecimalField(max_digits=18, decimal_places=0, validators=[MinValueValidator(0)], verbose_name='بهای تمام‌شده')
+    salvage_value = models.DecimalField(max_digits=18, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='ارزش اسقاط')
+    useful_life_years = models.PositiveSmallIntegerField(default=5, validators=[MinValueValidator(1)], verbose_name='عمر مفید (سال)')
+    accumulated_depreciation = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='استهلاک انباشته')
+    depreciated_months = models.PositiveIntegerField(default=0, verbose_name='ماه‌های استهلاک‌یافته')
+    is_active = models.BooleanField(default=True, verbose_name='فعال')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['code']
+        verbose_name = 'دارایی ثابت'
+        verbose_name_plural = 'دارایی‌های ثابت'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'code'], name='unique_asset_code_per_business'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} — {self.name}'
+
+    @property
+    def depreciable_base(self):
+        return self.cost - self.salvage_value
+
+    @property
+    def monthly_depreciation(self):
+        if self.useful_life_years <= 0:
+            return Decimal(0)
+        return (self.depreciable_base / (self.useful_life_years * 12)).quantize(Decimal('1'))
+
+    @property
+    def book_value(self):
+        return self.cost - self.accumulated_depreciation
+
+    @property
+    def life_months(self):
+        return self.useful_life_years * 12
+
+    @property
+    def is_fully_depreciated(self):
+        return self.accumulated_depreciation >= self.depreciable_base
+
+
+class DepreciationRun(models.Model):
+    """اجرای استهلاک یک ماه — با سند خودکار تجمیعی."""
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='depreciation_runs',
+        verbose_name='کسب‌وکار',
+    )
+    year = models.PositiveIntegerField(verbose_name='سال شمسی')
+    month = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(12)], verbose_name='ماه شمسی')
+    total_amount = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='جمع استهلاک دوره')
+    journal_entry = models.ForeignKey(
+        JournalEntry, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='depreciation_runs', verbose_name='سند حسابداری',
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='depreciation_runs', verbose_name='ثبت‌کننده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-year', '-month']
+        verbose_name = 'اجرای استهلاک'
+        verbose_name_plural = 'اجراهای استهلاک'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'year', 'month'], name='unique_depreciation_run'),
+        ]
+
+
+class DepreciationLine(models.Model):
+    run = models.ForeignKey(
+        DepreciationRun, on_delete=models.CASCADE, related_name='lines',
+        verbose_name='اجرا',
+    )
+    asset = models.ForeignKey(
+        FixedAsset, on_delete=models.PROTECT, related_name='depreciation_lines',
+        verbose_name='دارایی',
+    )
+    amount = models.DecimalField(max_digits=18, decimal_places=0, verbose_name='مبلغ استهلاک ماه')
+
+    class Meta:
+        ordering = ['asset__code']
+        verbose_name = 'سطر استهلاک'
+        verbose_name_plural = 'سطرهای استهلاک'

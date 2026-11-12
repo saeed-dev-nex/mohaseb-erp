@@ -26,6 +26,10 @@ from .payroll import (
     EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView,
     PayslipViewSet,
 )
+from .tax import (
+    DepreciationRunViewSet, FixedAssetViewSet, MoadianSubmissionViewSet,
+    SeasonalReportView, TaxSettingsView, VatReportView,
+)
 from .accounting import (
     AccountLedgerView, AccountViewSet, ChartSeedView, JournalEntryViewSet,
     TrialBalanceView,
@@ -47,4 +51,6 @@ __all__ = [
     'KardexView', 'StockAdjustView',
     'EmploymentProfileViewSet', 'PayrollPeriodViewSet', 'PayrollSettingsView',
     'PayslipViewSet',
+    'TaxSettingsView', 'VatReportView', 'SeasonalReportView',
+    'MoadianSubmissionViewSet', 'FixedAssetViewSet', 'DepreciationRunViewSet',
 ]

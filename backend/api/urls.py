@@ -11,6 +11,8 @@ from .views import (
     AccountViewSet, JournalEntryViewSet, ChartSeedView, TrialBalanceView, AccountLedgerView,
     WarehouseViewSet, ProductViewSet, PurchaseInvoiceViewSet, KardexView, StockAdjustView,
     EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView, PayslipViewSet,
+    TaxSettingsView, VatReportView, SeasonalReportView, MoadianSubmissionViewSet,
+    FixedAssetViewSet, DepreciationRunViewSet,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -48,6 +50,9 @@ router.register(r'purchases', PurchaseInvoiceViewSet, basename='purchase')
 router.register(r'employment-profiles', EmploymentProfileViewSet, basename='employment-profile')
 router.register(r'payroll-periods', PayrollPeriodViewSet, basename='payroll-period')
 router.register(r'payslips', PayslipViewSet, basename='payslip')
+router.register(r'moadian-submissions', MoadianSubmissionViewSet, basename='moadian-submission')
+router.register(r'fixed-assets', FixedAssetViewSet, basename='fixed-asset')
+router.register(r'depreciation-runs', DepreciationRunViewSet, basename='depreciation-run')
 
 
 urlpatterns = [
@@ -59,6 +64,9 @@ urlpatterns = [
     path('inventory/kardex/', KardexView.as_view(), name='inventory_kardex'),
     path('inventory/adjust/', StockAdjustView.as_view(), name='inventory_adjust'),
     path('payroll/settings/', PayrollSettingsView.as_view(), name='payroll_settings'),
+    path('tax/settings/', TaxSettingsView.as_view(), name='tax_settings'),
+    path('tax/vat-report/', VatReportView.as_view(), name='tax_vat_report'),
+    path('tax/seasonal/', SeasonalReportView.as_view(), name='tax_seasonal'),
     path('token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/logout/', TokenLogoutView.as_view(), name='token_logout'),
     path(

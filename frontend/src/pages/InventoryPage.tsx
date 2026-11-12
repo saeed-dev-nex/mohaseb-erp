@@ -50,6 +50,7 @@ export default function InventoryPage() {
     supplier: number | "";
     date: string;
     description: string;
+    vat_amount: string;
     lines: { product: number | ""; quantity: number; unit_price: string }[];
   } | null>(null);
   const [kardexProduct, setKardexProduct] = useState<number | "">("");
@@ -118,6 +119,7 @@ export default function InventoryPage() {
         supplier: purchase.supplier,
         date: purchase.date,
         description: purchase.description,
+        vat_amount: String(purchase.vat_amount || ""),
         lines: purchase.lines.map((l) => ({
           product: l.product,
           quantity: Number(l.quantity),
@@ -129,6 +131,7 @@ export default function InventoryPage() {
         supplier: "",
         date: new Date().toISOString().slice(0, 10),
         description: "",
+        vat_amount: "",
         lines: [{ product: "", quantity: 1, unit_price: "" }],
       });
     }
@@ -140,6 +143,7 @@ export default function InventoryPage() {
       supplier: purchaseForm.supplier,
       date: purchaseForm.date,
       description: purchaseForm.description,
+      vat_amount: Number(purchaseForm.vat_amount) || 0,
       lines: purchaseForm.lines
         .filter((l) => l.product !== "")
         .map((l) => ({

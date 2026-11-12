@@ -589,6 +589,7 @@ export interface PurchaseInvoice {
   description: string;
   status: "draft" | "posted";
   status_display: string;
+  vat_amount: number;
   journal_entry: number | null;
   lines: PurchaseLine[];
   total: number;
@@ -710,6 +711,109 @@ export const payrollAPI = {
     api.get(`payroll-periods/${periodId}/export-insurance/`, {
       responseType: "blob",
     }),
+};
+
+// ---- Tax & fixed assets (ERP phase 4) ----
+export interface VatReport {
+  year: number;
+  season: number;
+  sales_count: number;
+  sales_base: number;
+  output_vat: number;
+  purchases_count: number;
+  purchases_base: number;
+  input_vat: number;
+  payable: number;
+}
+
+export interface SeasonalRow {
+  party: number | null;
+  party_name: string;
+  national_id: string;
+  side: "sale" | "purchase";
+  count: number;
+  amount: number;
+  vat: number;
+}
+
+export interface MoadianSubmission {
+  id: number;
+  invoice: number;
+  invoice_number: string;
+  customer_name: string;
+  status: "queued" | "sent" | "failed";
+  status_display: string;
+  unique_id: string;
+  note: string;
+  submitted_at: string | null;
+}
+
+export interface FixedAsset {
+  id: number;
+  business: number;
+  code: string;
+  name: string;
+  category: string;
+  category_display: string;
+  purchase_date: string;
+  cost: number;
+  salvage_value: number;
+  useful_life_years: number;
+  accumulated_depreciation: number;
+  depreciated_months: number;
+  monthly_depreciation: number;
+  book_value: number;
+  is_active: boolean;
+}
+
+export interface DepreciationRun {
+  id: number;
+  year: number;
+  month: number;
+  total_amount: number;
+  journal_entry: number | null;
+  lines: {
+    id: number;
+    asset: number;
+    asset_name: string;
+    asset_code: string;
+    amount: number;
+  }[];
+  created_at: string;
+}
+
+export const taxAPI = {
+  settings: () => api.get("tax/settings/"),
+  updateSettings: (data: Payload) => api.patch("tax/settings/", data),
+  vatReport: (year: number, season: number) =>
+    api.get<VatReport>("tax/vat-report/", { params: { year, season } }),
+  seasonal: (year: number, season: number) =>
+    api.get<{ rows: SeasonalRow[] }>("tax/seasonal/", {
+      params: { year, season },
+    }),
+  seasonalCsv: (year: number, season: number) =>
+    api.get("tax/seasonal/", {
+      params: { year, season, export: "csv" },
+      responseType: "blob",
+    }),
+  submissions: () => api.get("moadian-submissions/"),
+  queue: (invoice: number) =>
+    api.post<MoadianSubmission>("moadian-submissions/queue/", { invoice }),
+  markSent: (id: number, data: Payload = {}) =>
+    api.post<MoadianSubmission>(`moadian-submissions/${id}/mark-sent/`, data),
+  markFailed: (id: number, data: Payload = {}) =>
+    api.post<MoadianSubmission>(`moadian-submissions/${id}/mark-failed/`, data),
+};
+
+export const assetsAPI = {
+  list: () => api.get<FixedAsset[]>("fixed-assets/"),
+  create: (data: Payload) => api.post<FixedAsset>("fixed-assets/", data),
+  update: (id: number, data: Payload) =>
+    api.patch<FixedAsset>(`fixed-assets/${id}/`, data),
+  delete: (id: number) => api.delete(`fixed-assets/${id}/`),
+  runs: () => api.get("depreciation-runs/"),
+  run: (data: Payload) => api.post<DepreciationRun>("depreciation-runs/", data),
+  deleteRun: (id: number) => api.delete(`depreciation-runs/${id}/`),
 };
 
 // ---- User Management (admin only) ----
