@@ -367,6 +367,11 @@ export const businessesAPI = {
     api.get<FiscalYear[]>(`businesses/${businessId}/fiscal-years/`),
   addFiscalYear: (businessId: number, data: Partial<FiscalYear>) =>
     api.post<FiscalYear>(`businesses/${businessId}/fiscal-years/`, data),
+  applyChart: (businessId: number) =>
+    api.post<{ created: number; existing: number }>(
+      `businesses/${businessId}/apply-chart/`,
+      {},
+    ),
   applyCatalog: (businessId: number) =>
     api.post<{ created: number; existing: number }>(
       `businesses/${businessId}/apply-catalog/`,
@@ -447,6 +452,97 @@ export const vehicleTypesAPI = {
   list: () => api.get("vehicle-types/"),
   create: (data: Payload) => api.post("vehicle-types/", data),
   delete: (id: Id) => api.delete(`vehicle-types/${id}/`),
+};
+
+// ---- Accounting (ERP phase 1) ----
+export interface Account {
+  id: number;
+  business: number;
+  code: string;
+  title: string;
+  parent: number | null;
+  parent_code: string | null;
+  level: number;
+  level_label: string;
+  nature: "debit" | "credit";
+  is_active: boolean;
+  is_system: boolean;
+}
+
+export interface JournalLine {
+  id?: number;
+  account: number;
+  account_code?: string;
+  account_title?: string;
+  party?: number | null;
+  party_name?: string;
+  description: string;
+  debit: number;
+  credit: number;
+}
+
+export interface JournalEntry {
+  id: number;
+  business: number;
+  fiscal_year: number;
+  number: number;
+  date: string;
+  description: string;
+  reference: string;
+  status: "draft" | "posted";
+  status_display: string;
+  lines: JournalLine[];
+  total_debit: number;
+  total_credit: number;
+  is_balanced: boolean;
+  created_by_name: string;
+}
+
+export interface TrialBalanceRow {
+  account: number;
+  code: string;
+  title: string;
+  nature: string;
+  total_debit: number;
+  total_credit: number;
+  balance_debit: number;
+  balance_credit: number;
+}
+
+export const accountingAPI = {
+  accounts: () => api.get<Account[]>("accounts/"),
+  createAccount: (data: Partial<Account>) =>
+    api.post<Account>("accounts/", data),
+  deleteAccount: (id: number) => api.delete(`accounts/${id}/`),
+  seedChart: () =>
+    api.post<{ created: number; existing: number }>(
+      "accounting/seed-chart/",
+      {},
+    ),
+  entries: (params: Params = {}) => api.get("journal-entries/", { params }),
+  getEntry: (id: number) => api.get<JournalEntry>(`journal-entries/${id}/`),
+  createEntry: (data: Payload) =>
+    api.post<JournalEntry>("journal-entries/", data),
+  updateEntry: (id: number, data: Payload) =>
+    api.put<JournalEntry>(`journal-entries/${id}/`, data),
+  deleteEntry: (id: number) => api.delete(`journal-entries/${id}/`),
+  postEntry: (id: number) =>
+    api.post<JournalEntry>(`journal-entries/${id}/post/`, {}),
+  unpostEntry: (id: number) =>
+    api.post<JournalEntry>(`journal-entries/${id}/unpost/`, {}),
+  trialBalance: (fiscalYear?: number) =>
+    api.get<{
+      rows: TrialBalanceRow[];
+      total_debit: number;
+      total_credit: number;
+      is_balanced: boolean;
+    }>("accounting/trial-balance/", {
+      params: fiscalYear ? { fiscal_year: fiscalYear } : {},
+    }),
+  ledger: (account: number, fiscalYear?: number) =>
+    api.get("accounting/ledger/", {
+      params: { account, ...(fiscalYear ? { fiscal_year: fiscalYear } : {}) },
+    }),
 };
 
 // ---- User Management (admin only) ----

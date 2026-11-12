@@ -39,6 +39,24 @@ class Customer(models.Model):
         'Business', on_delete=models.PROTECT, null=True, blank=True,
         related_name='business_customers', verbose_name='کسب‌وکار',
     )
+    PARTY_ROLE_CHOICES = [
+        ('customer', 'مشتری'),
+        ('supplier', 'تأمین‌کننده'),
+        ('both', 'مشتری و تأمین‌کننده'),
+    ]
+    PERSON_TYPE_CHOICES = [
+        ('legal', 'حقوقی'),
+        ('individual', 'حقیقی'),
+    ]
+
+    party_role = models.CharField(
+        max_length=16, choices=PARTY_ROLE_CHOICES, default='customer',
+        verbose_name='نقش طرف حساب',
+    )
+    person_type = models.CharField(
+        max_length=16, choices=PERSON_TYPE_CHOICES, default='legal',
+        verbose_name='نوع شخصیت',
+    )
     name = models.CharField(max_length=255, verbose_name='نام')
     phone = models.CharField(max_length=50, blank=True, null=True, verbose_name='تلفن')
     email = models.EmailField(blank=True, null=True, verbose_name='ایمیل')
@@ -740,6 +758,7 @@ class UserModuleAccess(models.Model):
     reports = models.BooleanField(default=True, verbose_name='گزارشات')
     chat = models.BooleanField(default=True, verbose_name='گفتگو')
     staff = models.BooleanField(default=True, verbose_name='پرسنل')
+    accounting = models.BooleanField(default=True, verbose_name='حسابداری')
     settings = models.BooleanField(default=True, verbose_name='تنظیمات')
     users = models.BooleanField(default=True, verbose_name='مدیریت کاربران')
     backup = models.BooleanField(default=True, verbose_name='بکاپ')
@@ -922,3 +941,141 @@ class BusinessMembership(models.Model):
 
     def __str__(self):
         return f'{self.user} @ {self.business} ({self.role})'
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — accounting core (phase 1)
+#
+# Double-entry bookkeeping per business and fiscal year: a hierarchical
+# chart of accounts, journal entries with balanced lines, and posting
+# as the gate between drafts and the ledger.
+# ---------------------------------------------------------------------------
+
+class Account(models.Model):
+    """یک حساب در کدینگ — درخت گروه/کل/معین/تفصیلی."""
+
+    NATURE_CHOICES = [
+        ('debit', 'بدهکار'),
+        ('credit', 'بستانکار'),
+    ]
+    LEVEL_LABELS = {1: 'گروه', 2: 'کل', 3: 'معین', 4: 'تفصیلی'}
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='accounts',
+        verbose_name='کسب‌وکار',
+    )
+    code = models.CharField(max_length=32, verbose_name='کد حساب')
+    title = models.CharField(max_length=255, verbose_name='عنوان حساب')
+    parent = models.ForeignKey(
+        'self', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='children', verbose_name='حساب والد',
+    )
+    level = models.PositiveSmallIntegerField(default=1, verbose_name='سطح')
+    nature = models.CharField(max_length=8, choices=NATURE_CHOICES, default='debit', verbose_name='ماهیت')
+    is_active = models.BooleanField(default=True, verbose_name='فعال')
+    is_system = models.BooleanField(default=False, verbose_name='سیستمی (کدینگ استاندارد)')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['code']
+        verbose_name = 'حساب'
+        verbose_name_plural = 'حساب‌ها'
+        constraints = [
+            models.UniqueConstraint(fields=['business', 'code'], name='unique_account_code_per_business'),
+        ]
+
+    def __str__(self):
+        return f'{self.code} — {self.title}'
+
+    @property
+    def is_postable(self):
+        """Only معین (۳) and تفصیلی (۴) accounts accept journal lines."""
+        return self.level >= 3
+
+
+class JournalEntry(models.Model):
+    """سند حسابداری — سربرگ سند با شمارهٔ یکتا در هر سال مالی."""
+
+    STATUS_CHOICES = [
+        ('draft', 'پیش‌نویس'),
+        ('posted', 'ثبت‌شده'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='journal_entries',
+        verbose_name='کسب‌وکار',
+    )
+    fiscal_year = models.ForeignKey(
+        FiscalYear, on_delete=models.PROTECT, related_name='journal_entries',
+        verbose_name='سال مالی',
+    )
+    number = models.PositiveIntegerField(verbose_name='شماره سند')
+    date = models.DateField(verbose_name='تاریخ سند')
+    description = models.CharField(max_length=500, blank=True, default='', verbose_name='شرح سند')
+    reference = models.CharField(max_length=100, blank=True, default='', verbose_name='شماره مرجع / عطف')
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='draft', verbose_name='وضعیت')
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='journal_entries', verbose_name='ثبت‌کننده',
+    )
+    posted_at = models.DateTimeField(null=True, blank=True, verbose_name='زمان ثبت نهایی')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-number']
+        verbose_name = 'سند حسابداری'
+        verbose_name_plural = 'اسناد حسابداری'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business', 'fiscal_year', 'number'],
+                name='unique_journal_number_per_year',
+            ),
+        ]
+
+    def __str__(self):
+        return f'سند {self.number} ({self.get_status_display()})'
+
+    @property
+    def total_debit(self):
+        return sum((line.debit for line in self.lines.all()), Decimal(0))
+
+    @property
+    def total_credit(self):
+        return sum((line.credit for line in self.lines.all()), Decimal(0))
+
+    @property
+    def is_balanced(self):
+        return self.total_debit == self.total_credit and self.total_debit > 0
+
+
+class JournalLine(models.Model):
+    """سطر سند — بدهکار/بستانکار روی یک حساب معین یا تفصیلی."""
+
+    entry = models.ForeignKey(
+        JournalEntry, on_delete=models.CASCADE, related_name='lines',
+        verbose_name='سند',
+    )
+    account = models.ForeignKey(
+        Account, on_delete=models.PROTECT, related_name='journal_lines',
+        verbose_name='حساب',
+    )
+    party = models.ForeignKey(
+        Customer, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='journal_lines', verbose_name='طرف حساب (شخص)',
+    )
+    description = models.CharField(max_length=500, blank=True, default='', verbose_name='شرح سطر')
+    debit = models.DecimalField(max_digits=18, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='بدهکار')
+    credit = models.DecimalField(max_digits=18, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='بستانکار')
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'سطر سند'
+        verbose_name_plural = 'سطرهای سند'
+
+    def clean(self):
+        super().clean()
+        if (self.debit or 0) > 0 and (self.credit or 0) > 0:
+            raise ValidationError('هر سطر سند فقط می‌تواند بدهکار یا بستانکار باشد، نه هر دو.')
+        if (self.debit or 0) == 0 and (self.credit or 0) == 0:
+            raise ValidationError('مبلغ سطر سند باید بزرگ‌تر از صفر باشد.')

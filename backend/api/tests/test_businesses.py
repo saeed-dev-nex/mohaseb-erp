@@ -194,3 +194,132 @@ class TemplateDepthTests(TestCase):
         rows = response.data['results'] if isinstance(response.data, dict) else response.data
         titles = [row['title'] for row in rows]
         self.assertEqual(titles, ['کالای یک'])
+
+
+class AccountingTests(TestCase):
+    """Phase 1: chart, journal entries, posting rules, trial balance."""
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username='acc-admin', password='admin' + '-pass-12345')
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            '/api/businesses/',
+            {'name': 'حسابداری تست', 'template_key': 'retail', 'person_type': 'legal'},
+            format='json',
+        )
+        assert response.status_code == 201, response.content
+        self.business = Business.objects.get(name='حسابداری تست')
+        self.fiscal_year = self.business.current_fiscal_year
+        self.headers = {'HTTP_X_BUSINESS_ID': str(self.business.id)}
+        accounts = self.client.get('/api/accounts/', **self.headers)
+        self.by_code = {row['code']: row for row in accounts.data}
+
+    def _entry_payload(self, debit_account, credit_account, amount=1_000_000, date_offset=10):
+        from datetime import timedelta
+
+        return {
+            'date': (self.fiscal_year.start_date + timedelta(days=date_offset)).isoformat(),
+            'description': 'سند آزمایشی',
+            'lines': [
+                {'account': debit_account, 'debit': amount, 'credit': 0, 'description': 'بدهکار'},
+                {'account': credit_account, 'debit': 0, 'credit': amount, 'description': 'بستانکار'},
+            ],
+        }
+
+    def test_chart_seeded_on_business_create(self):
+        self.assertEqual(len(self.by_code), 47)
+        self.assertIn('1101', self.by_code)  # صندوق
+        self.assertIn('4102', self.by_code)  # درآمد ارائه خدمات
+        self.assertEqual(self.by_code['1101']['level'], 3)
+
+    def test_accounting_requires_business_context(self):
+        response = self.client.get('/api/accounts/')
+        self.assertEqual(response.status_code, 400)
+
+    def test_balanced_entry_posts_and_trial_balance_matches(self):
+        payload = self._entry_payload(self.by_code['1101']['id'], self.by_code['3101']['id'])
+        created = self.client.post('/api/journal-entries/', payload, format='json', **self.headers)
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(created.data['number'], 1)
+        self.assertTrue(created.data['is_balanced'])
+        posted = self.client.post(f"/api/journal-entries/{created.data['id']}/post/", {}, format='json', **self.headers)
+        self.assertEqual(posted.status_code, 200, posted.content)
+        self.assertEqual(posted.data['status'], 'posted')
+        trial = self.client.get('/api/accounting/trial-balance/', **self.headers)
+        self.assertEqual(trial.status_code, 200, trial.content)
+        self.assertTrue(trial.data['is_balanced'])
+        self.assertEqual(int(trial.data['total_debit']), 1_000_000)
+        codes = [row['code'] for row in trial.data['rows']]
+        self.assertIn('1101', codes)
+
+    def test_unbalanced_entry_cannot_post(self):
+        payload = self._entry_payload(self.by_code['1101']['id'], self.by_code['3101']['id'])
+        payload['lines'][1]['credit'] = 900_000
+        created = self.client.post('/api/journal-entries/', payload, format='json', **self.headers)
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertFalse(created.data['is_balanced'])
+        posted = self.client.post(f"/api/journal-entries/{created.data['id']}/post/", {}, format='json', **self.headers)
+        self.assertEqual(posted.status_code, 400)
+
+    def test_group_account_cannot_take_lines(self):
+        payload = self._entry_payload(self.by_code['1']['id'], self.by_code['3101']['id'])
+        created = self.client.post('/api/journal-entries/', payload, format='json', **self.headers)
+        self.assertEqual(created.status_code, 400)
+
+    def test_posted_entry_is_immutable_until_unposted(self):
+        payload = self._entry_payload(self.by_code['1102']['id'], self.by_code['4102']['id'], amount=500_000)
+        created = self.client.post('/api/journal-entries/', payload, format='json', **self.headers)
+        entry_id = created.data['id']
+        self.client.post(f'/api/journal-entries/{entry_id}/post/', {}, format='json', **self.headers)
+        edited = self.client.patch(
+            f'/api/journal-entries/{entry_id}/',
+            {'description': 'ویرایش'}, format='json', **self.headers,
+        )
+        self.assertEqual(edited.status_code, 400)
+        unposted = self.client.post(f'/api/journal-entries/{entry_id}/unpost/', {}, format='json', **self.headers)
+        self.assertEqual(unposted.status_code, 200, unposted.content)
+        edited = self.client.patch(
+            f'/api/journal-entries/{entry_id}/',
+            {'description': 'ویرایش'}, format='json', **self.headers,
+        )
+        self.assertEqual(edited.status_code, 200, edited.content)
+
+    def test_entry_date_must_be_inside_fiscal_year(self):
+        payload = self._entry_payload(self.by_code['1101']['id'], self.by_code['3101']['id'])
+        payload['date'] = '1999-01-01'
+        created = self.client.post('/api/journal-entries/', payload, format='json', **self.headers)
+        self.assertEqual(created.status_code, 400)
+
+    def test_operator_cannot_write_journal(self):
+        operator = User.objects.create_user(username='acc-op', password='op' + '-pass-12345')
+        BusinessMembership.objects.create(user=operator, business=self.business, role='operator')
+        self.client.force_authenticate(operator)
+        payload = self._entry_payload(self.by_code['1101']['id'], self.by_code['3101']['id'])
+        created = self.client.post('/api/journal-entries/', payload, format='json', **self.headers)
+        self.assertEqual(created.status_code, 403)
+
+    def test_ledger_running_balance(self):
+        payload = self._entry_payload(self.by_code['1101']['id'], self.by_code['4101']['id'], amount=750_000)
+        created = self.client.post('/api/journal-entries/', payload, format='json', **self.headers)
+        self.client.post(f"/api/journal-entries/{created.data['id']}/post/", {}, format='json', **self.headers)
+        ledger = self.client.get(
+            '/api/accounting/ledger/',
+            {'account': self.by_code['1101']['id']}, **self.headers,
+        )
+        self.assertEqual(ledger.status_code, 200, ledger.content)
+        self.assertEqual(len(ledger.data['rows']), 1)
+        self.assertEqual(int(ledger.data['rows'][0]['balance']), 750_000)
+
+    def test_numbers_increment_per_fiscal_year(self):
+        first = self.client.post(
+            '/api/journal-entries/',
+            self._entry_payload(self.by_code['1101']['id'], self.by_code['3101']['id']),
+            format='json', **self.headers,
+        )
+        second = self.client.post(
+            '/api/journal-entries/',
+            self._entry_payload(self.by_code['1101']['id'], self.by_code['3101']['id'], date_offset=11),
+            format='json', **self.headers,
+        )
+        self.assertEqual((first.data['number'], second.data['number']), (1, 2))

@@ -17,7 +17,7 @@ from django.core.exceptions import ObjectDoesNotExist
 # (plain IsAuthenticated endpoints).
 RESOURCE_MODULES = (
     'invoices', 'customers', 'services', 'expenses', 'cheques',
-    'reports', 'chat', 'staff',
+    'reports', 'chat', 'staff', 'accounting',
 )
 # Account administration is distinct from Django's is_staff flag.
 MANAGER_MODULES = ('settings',)

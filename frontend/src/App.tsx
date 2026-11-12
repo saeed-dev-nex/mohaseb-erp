@@ -25,6 +25,7 @@ const StaffPage = lazy(() => import("./pages/StaffPage"));
 const UsersPage = lazy(() => import("./pages/UsersPage"));
 const UserPerformancePage = lazy(() => import("./pages/UserPerformancePage"));
 const Chat = lazy(() => import("./pages/Chat"));
+const AccountingPage = lazy(() => import("./pages/AccountingPage"));
 const Layout = lazy(() => import("./components/Layout"));
 
 const PageLoader = () => (
@@ -167,6 +168,16 @@ function App() {
               element={
                 <ModuleRoute module="cheques">
                   <Cheques />
+                </ModuleRoute>
+              }
+            />
+
+            {/* Accounting (ERP phase 1) */}
+            <Route
+              path="accounting"
+              element={
+                <ModuleRoute module="accounting">
+                  <AccountingPage />
                 </ModuleRoute>
               }
             />

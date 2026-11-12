@@ -289,7 +289,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
         model = Customer
         list_serializer_class = CustomerFinancialListSerializer
         fields = [
-            'id', 'business', 'name', 'phone', 'email', 'national_id',
+            'id', 'business', 'party_role', 'person_type', 'name', 'phone', 'email', 'national_id',
             'address', 'notes', 'created_at',
             'total_invoices', 'total_paid', 'total_pending',
         ]
@@ -334,7 +334,7 @@ class CustomerDetailSerializer(serializers.ModelSerializer):
         model = Customer
         list_serializer_class = CustomerFinancialListSerializer
         fields = [
-            'id', 'business', 'name', 'phone', 'email', 'address',
+            'id', 'business', 'party_role', 'person_type', 'name', 'phone', 'email', 'address',
             'national_id', 'notes', 'created_at', 'updated_at',
             'documents', 'total_invoices', 'total_paid', 'total_pending'
         ]
@@ -883,3 +883,113 @@ class BusinessSerializer(serializers.ModelSerializer):
             return 'owner'
         membership = obj.memberships.filter(user=user).first()
         return membership.role if membership else None
+
+
+# ---------------------------------------------------------------------------
+# Mohaseb ERP — accounting (phase 1)
+# ---------------------------------------------------------------------------
+
+from .models import Account, JournalEntry, JournalLine
+
+
+class AccountSerializer(serializers.ModelSerializer):
+    level_label = serializers.SerializerMethodField()
+    parent_code = serializers.CharField(source='parent.code', read_only=True, default=None)
+
+    class Meta:
+        model = Account
+        fields = [
+            'id', 'business', 'code', 'title', 'parent', 'parent_code',
+            'level', 'level_label', 'nature', 'is_active', 'is_system',
+            'created_at',
+        ]
+        read_only_fields = ['business', 'is_system', 'created_at']
+
+    def get_level_label(self, obj):
+        return Account.LEVEL_LABELS.get(obj.level, '')
+
+
+class JournalLineSerializer(serializers.ModelSerializer):
+    account_code = serializers.CharField(source='account.code', read_only=True)
+    account_title = serializers.CharField(source='account.title', read_only=True)
+    party_name = serializers.CharField(source='party.name', read_only=True, default='')
+
+    class Meta:
+        model = JournalLine
+        fields = [
+            'id', 'account', 'account_code', 'account_title',
+            'party', 'party_name', 'description', 'debit', 'credit',
+        ]
+
+
+class JournalEntrySerializer(serializers.ModelSerializer):
+    lines = JournalLineSerializer(many=True)
+    total_debit = serializers.SerializerMethodField()
+    total_credit = serializers.SerializerMethodField()
+    is_balanced = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JournalEntry
+        fields = [
+            'id', 'business', 'fiscal_year', 'number', 'date', 'description',
+            'reference', 'status', 'status_display', 'lines',
+            'total_debit', 'total_credit', 'is_balanced',
+            'created_by', 'created_by_name', 'posted_at',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'business', 'number', 'status', 'created_by', 'posted_at',
+            'created_at', 'updated_at',
+        ]
+        extra_kwargs = {'fiscal_year': {'required': False}}
+
+    def get_total_debit(self, obj):
+        return obj.total_debit
+
+    def get_total_credit(self, obj):
+        return obj.total_credit
+
+    def get_is_balanced(self, obj):
+        return obj.is_balanced
+
+    def get_created_by_name(self, obj):
+        if not obj.created_by:
+            return ''
+        return obj.created_by.get_full_name() or obj.created_by.username
+
+    def validate_lines(self, lines):
+        if len(lines) < 2:
+            raise serializers.ValidationError('سند حسابداری باید دست‌کم دو سطر داشته باشد.')
+        for line in lines:
+            debit = line.get('debit') or 0
+            credit = line.get('credit') or 0
+            if debit > 0 and credit > 0:
+                raise serializers.ValidationError('هر سطر فقط می‌تواند بدهکار یا بستانکار باشد.')
+            if debit == 0 and credit == 0:
+                raise serializers.ValidationError('مبلغ هر سطر باید بزرگ‌تر از صفر باشد.')
+            account = line.get('account')
+            if account is not None and not account.is_postable:
+                raise serializers.ValidationError(
+                    f'حساب «{account.code} — {account.title}» معین یا تفصیلی نیست و سند نمی‌خورد.'
+                )
+        return lines
+
+    def create(self, validated_data):
+        lines = validated_data.pop('lines')
+        entry = JournalEntry.objects.create(**validated_data)
+        for line in lines:
+            JournalLine.objects.create(entry=entry, **line)
+        return entry
+
+    def update(self, instance, validated_data):
+        lines = validated_data.pop('lines', None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        instance.save()
+        if lines is not None:
+            instance.lines.all().delete()
+            for line in lines:
+                JournalLine.objects.create(entry=instance, **line)
+        return instance

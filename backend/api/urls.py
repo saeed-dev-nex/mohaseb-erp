@@ -8,6 +8,7 @@ from .views import (
     ExpenseViewSet, StaffViewSet, BackupViewSet, VehicleTypeViewSet,
     UserViewSet, BackupConfigViewSet, DatabaseConfigViewSet, AppUpdateViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet, ChatMessageViewSet,
     BusinessViewSet, BusinessTemplateListView,
+    AccountViewSet, JournalEntryViewSet, ChartSeedView, TrialBalanceView, AccountLedgerView,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -37,11 +38,16 @@ router.register(r'chat', ChatMessageViewSet, basename='chat')
 router.register(r'welcome-settings', WelcomeSettingsViewSet, basename='welcome-settings')
 router.register(r'social-networks', SocialNetworkViewSet, basename='social-network')
 router.register(r'businesses', BusinessViewSet, basename='business')
+router.register(r'accounts', AccountViewSet, basename='account')
+router.register(r'journal-entries', JournalEntryViewSet, basename='journal-entry')
 
 
 urlpatterns = [
     path('changes/', database_revision, name='database_revision'),
     path('business-templates/', BusinessTemplateListView.as_view(), name='business_templates'),
+    path('accounting/seed-chart/', ChartSeedView.as_view(), name='accounting_seed_chart'),
+    path('accounting/trial-balance/', TrialBalanceView.as_view(), name='accounting_trial_balance'),
+    path('accounting/ledger/', AccountLedgerView.as_view(), name='accounting_ledger'),
     path('token/', ThrottledTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token/logout/', TokenLogoutView.as_view(), name='token_logout'),
     path(

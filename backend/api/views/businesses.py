@@ -23,6 +23,7 @@ from ..serializers import (
     BusinessMembershipSerializer, BusinessSerializer, FiscalYearSerializer,
 )
 from ..services.business_setup import create_default_fiscal_year, seed_template_catalog
+from ..services.accounting import seed_standard_chart
 
 MANAGE_ROLES = ('owner', 'manager')
 
@@ -70,6 +71,7 @@ class BusinessViewSet(viewsets.ModelViewSet):
         )
         create_default_fiscal_year(business)
         seed_template_catalog(business)
+        seed_standard_chart(business)
         return Response(
             self.get_serializer(business).data, status=status.HTTP_201_CREATED,
         )
@@ -97,6 +99,13 @@ class BusinessViewSet(viewsets.ModelViewSet):
         business = self.get_object()
         self._require_manage(business)
         return Response(seed_template_catalog(business))
+
+    @action(detail=True, methods=['post'], url_path='apply-chart')
+    def apply_chart(self, request, pk=None):
+        """Seed (or top up) the standard chart of accounts."""
+        business = self.get_object()
+        self._require_manage(business)
+        return Response(seed_standard_chart(business))
 
     @action(detail=True, methods=['get'], url_path='modules')
     def modules(self, request, pk=None):
