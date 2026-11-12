@@ -56,16 +56,17 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error: any) => {
+    const failedAccess = String(
+      error.config?.headers?.Authorization || "",
+    ).replace(/^Bearer /, "");
     if (
       error.response?.status === 401 &&
+      failedAccess &&
       !error.config?.url?.includes("token/") &&
       !error.config?._retriedAfterRefresh
     ) {
       error.config._retriedAfterRefresh = true;
       try {
-        const failedAccess = String(
-          error.config.headers?.Authorization || "",
-        ).replace(/^Bearer /, "");
         const access = await refreshAccess(failedAccess);
         error.config.headers.Authorization = `Bearer ${access}`;
         return api.request(error.config);
@@ -74,7 +75,13 @@ api.interceptors.response.use(
         Cookies.remove("refresh_token");
         localStorage.removeItem("mohaseb_user");
         queryClient.clear();
-        window.location.href = "/login";
+        // Redirecting while already on a public page would reload it
+        // and re-fire the failing request — an infinite loop that
+        // also burns the token-refresh throttle.
+        const path = window.location.pathname;
+        if (path !== "/login" && path !== "/setup") {
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);
