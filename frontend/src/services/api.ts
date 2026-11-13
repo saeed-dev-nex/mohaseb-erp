@@ -400,6 +400,8 @@ export interface BusinessTemplate {
 export const businessesAPI = {
   list: () => api.get<Business[]>("businesses/"),
   create: (data: Partial<Business>) => api.post<Business>("businesses/", data),
+  update: (businessId: number, data: Partial<Business>) =>
+    api.patch<Business>(`businesses/${businessId}/`, data),
   templates: () => api.get<BusinessTemplate[]>("business-templates/"),
   fiscalYears: (businessId: number) =>
     api.get<FiscalYear[]>(`businesses/${businessId}/fiscal-years/`),

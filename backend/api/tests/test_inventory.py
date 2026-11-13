@@ -169,3 +169,91 @@ class InventoryTests(TestCase):
             f"/api/purchases/{purchase['id']}/post/", {}, format='json', **self.headers,
         )
         self.assertEqual(posted.status_code, 403)
+
+
+class ServiceRevenuePostingTests(TestCase):
+    """Sales journaling must cover service lines too, and stay in sync.
+
+    Regression coverage for the audit finding that a service-only
+    invoice never reached the books (a service trade's accounting
+    stayed empty), and that editing/deleting a posted invoice left
+    stale journals and stock movements behind.
+    """
+
+    def setUp(self):
+        self.admin = User.objects.create_superuser(username='svc-admin', password='<redacted>' + '-pass-12345')
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            '/api/businesses/',
+            {'name': 'تعمیرگاه تست', 'template_key': 'services_repair', 'person_type': 'individual'},
+            format='json',
+        )
+        assert response.status_code == 201, response.content
+        self.business = Business.objects.get(name='تعمیرگاه تست')
+        self.headers = {'HTTP_X_BUSINESS_ID': str(self.business.id)}
+        self.customer = Customer.objects.create(
+            business=self.business, name='مشتری خدماتی', party_role='customer',
+        )
+        from api.models import Service
+
+        self.service = Service.objects.filter(business=self.business).first()
+        assert self.service is not None
+
+    def _service_invoice(self, quantity=2, price=70000):
+        created = self.client.post(
+            '/api/invoices/',
+            {
+                'customer': self.customer.id,
+                'items': [
+                    {'service': self.service.id, 'quantity': quantity, 'main_price': price},
+                ],
+            },
+            format='json', **self.headers,
+        )
+        assert created.status_code == 201, created.content
+        return created.data
+
+    def test_service_only_invoice_posts_revenue_journal(self):
+        data = self._service_invoice()
+        self.assertTrue(data['inventory_posted'])
+        entry = JournalEntry.objects.get(id=data['sales_journal'])
+        self.assertEqual(entry.total_debit, Decimal('140000'))
+        revenue_line = entry.lines.get(credit=140000)
+        self.assertEqual(revenue_line.account.code, '4101')
+        receivable_line = entry.lines.get(debit=140000)
+        self.assertEqual(receivable_line.party_id, self.customer.id)
+        # No stock side for a pure service sale.
+        self.assertFalse(
+            StockMovement.objects.filter(source_type='invoice', source_id=data['id']).exists()
+        )
+        self.assertIsNone(data['cogs_journal'])
+        trial = self.client.get('/api/accounting/trial-balance/', **self.headers)
+        self.assertTrue(trial.data['is_balanced'])
+
+    def test_edit_posted_invoice_resyncs_journal(self):
+        data = self._service_invoice()
+        old_journal_id = data['sales_journal']
+        updated = self.client.put(
+            f"/api/invoices/{data['id']}/",
+            {
+                'customer': self.customer.id,
+                'items': [
+                    {'service': self.service.id, 'quantity': 1, 'main_price': 150000},
+                ],
+            },
+            format='json', **self.headers,
+        )
+        self.assertEqual(updated.status_code, 200, updated.content)
+        self.assertTrue(updated.data['inventory_posted'])
+        self.assertNotEqual(updated.data['sales_journal'], old_journal_id)
+        self.assertFalse(JournalEntry.objects.filter(id=old_journal_id).exists())
+        entry = JournalEntry.objects.get(id=updated.data['sales_journal'])
+        self.assertEqual(entry.total_debit, Decimal('150000'))
+
+    def test_delete_posted_invoice_removes_journal(self):
+        data = self._service_invoice()
+        journal_id = data['sales_journal']
+        deleted = self.client.delete(f"/api/invoices/{data['id']}/", **self.headers)
+        self.assertEqual(deleted.status_code, 204, deleted.content)
+        self.assertFalse(JournalEntry.objects.filter(id=journal_id).exists())

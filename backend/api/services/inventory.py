@@ -113,11 +113,14 @@ def unpost_purchase(purchase):
 
 @transaction.atomic
 def post_sale(invoice, user=None):
-    """ثبت انبار و سند برای سطرهای کالایی فاکتور فروش.
+    """ثبت انبار و سند فروش فاکتور.
 
-    Revenue is recognised for the product lines only (service lines
-    keep their existing operational flow), and COGS is valued at each
-    product's weighted-average cost at posting time.
+    Revenue is recognised for EVERY line — product and service alike:
+    a service business's sales must reach the books exactly like a
+    shop's (before this, service-only invoices never journaled and a
+    service trade's accounting stayed empty). Stock movements and COGS
+    remain product-only, valued at each product's weighted-average
+    cost at posting time.
     """
     from ..models import StockMovement
 
@@ -125,9 +128,10 @@ def post_sale(invoice, user=None):
         raise ValueError('انبار و سند این فاکتور قبلاً ثبت شده است.')
     if invoice.business_id is None:
         raise ValueError('فاکتور به کسب‌وکاری متصل نیست.')
-    items = [item for item in invoice.items.all() if item.product_id]
-    if not items:
-        raise ValueError('این فاکتور سطر کالایی ندارد.')
+    all_items = list(invoice.items.all())
+    if not all_items:
+        raise ValueError('این فاکتور سطری ندارد.')
+    items = [item for item in all_items if item.product_id]
     warehouse = get_default_warehouse(invoice.business)
     sale_date = invoice.date.date() if hasattr(invoice.date, 'date') else invoice.date
     revenue = Decimal(0)
@@ -142,18 +146,29 @@ def post_sale(invoice, user=None):
             date=sale_date, created_by=user,
             note=f'فروش — فاکتور {invoice.invoice_number or invoice.id}',
         )
-        revenue += Decimal(item.line_total)
         cogs += Decimal(item.quantity) * product.average_cost
+    # Revenue covers the whole invoice: product lines plus service
+    # lines (an item without a product is a service/adhoc line).
+    revenue = sum((Decimal(item.line_total) for item in all_items), Decimal(0))
     business = invoice.business
-    invoice.sales_journal = create_posted_entry(
-        business, sale_date,
-        f'فروش کالا — فاکتور {invoice.invoice_number or invoice.id}',
-        [
-            (RECEIVABLES_ACCOUNT, revenue, Decimal(0), invoice.customer, 'مطالبات از مشتری'),
-            (SALES_REVENUE_ACCOUNT, Decimal(0), revenue, None, 'درآمد فروش کالا'),
-        ],
-        reference=f'INV-{invoice.invoice_number or invoice.id}',
-    )
+    if revenue > 0:
+        has_products = bool(items)
+        has_services = len(all_items) > len(items)
+        if has_products and has_services:
+            sale_label = 'فروش کالا و خدمات'
+        elif has_services:
+            sale_label = 'فروش خدمات'
+        else:
+            sale_label = 'فروش کالا'
+        invoice.sales_journal = create_posted_entry(
+            business, sale_date,
+            f'{sale_label} — فاکتور {invoice.invoice_number or invoice.id}',
+            [
+                (RECEIVABLES_ACCOUNT, revenue, Decimal(0), invoice.customer, 'مطالبات از مشتری'),
+                (SALES_REVENUE_ACCOUNT, Decimal(0), revenue, None, f'درآمد {sale_label}'),
+            ],
+            reference=f'INV-{invoice.invoice_number or invoice.id}',
+        )
     if cogs > 0:
         invoice.cogs_journal = create_posted_entry(
             business, sale_date,

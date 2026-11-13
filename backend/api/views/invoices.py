@@ -96,6 +96,21 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             edit_request.used_at = timezone.now()
             edit_request.save(update_fields=['status', 'used_at'])
         record_audit(user=self.request.user, instance=invoice, action='update', before=before, after=snapshot(invoice))
+        # A posted invoice's stock movements and journals were derived
+        # from its lines; re-derive them so an edit can never leave the
+        # books or the warehouse describing the pre-edit invoice.
+        if invoice.business_id is not None and invoice.inventory_posted:
+            from ..services.inventory import post_sale, unpost_sale
+
+            with transaction.atomic():
+                unpost_sale(invoice)
+                if invoice.items.exists():
+                    try:
+                        post_sale(invoice, user=self.request.user)
+                    except ValueError as exc:
+                        from rest_framework.exceptions import ValidationError
+
+                        raise ValidationError({'detail': str(exc)}) from exc
 
     @transaction.atomic
     def perform_create(self, serializer):
@@ -109,11 +124,20 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             **extra,
         )
         record_audit(user=self.request.user, instance=invoice, action='create', after=snapshot(invoice))
-        # ERP phase 2: a sales invoice carrying product lines posts its
-        # stock-outs and auto-journals (revenue + COGS) immediately.
-        if business is not None and invoice.items.filter(product__isnull=False).exists():
+        # ERP phase 2+: a sales invoice posts its auto-journals
+        # (revenue over ALL lines — services included) immediately,
+        # plus stock-outs and COGS for any product lines it carries.
+        # A posting refusal (e.g. the business has no fiscal year at
+        # all) must surface as an actionable 400, never a 500 — the
+        # create is atomic, so the invoice rolls back with it.
+        if business is not None and invoice.items.exists():
             from ..services.inventory import post_sale
-            post_sale(invoice, user=self.request.user)
+            try:
+                post_sale(invoice, user=self.request.user)
+            except ValueError as exc:
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError({'detail': str(exc)}) from exc
 
     @action(detail=True, methods=['post'], url_path='post-inventory')
     def post_inventory(self, request, pk=None):
@@ -146,6 +170,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         before = snapshot(instance)
         record_audit(user=self.request.user, instance=instance, action='delete', before=before)
+        # Deleting a posted invoice must take its stock movements and
+        # auto-journals with it — otherwise the books keep a sale whose
+        # invoice no longer exists.
+        if instance.business_id is not None and instance.inventory_posted:
+            from ..services.inventory import unpost_sale
+
+            unpost_sale(instance)
         instance.delete()
 
     def get_queryset(self):
@@ -677,18 +708,42 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice_serializer.is_valid(raise_exception=True)
 
         customer = None
+        # ERP: with a business selected, the customer belongs to that
+        # business — lookups must not adopt another business's customer
+        # who happens to share the phone/name, and a new customer is
+        # created inside the business (previously quick invoices and
+        # their customers were created unscoped: invisible in the
+        # business's lists and never journaled).
+        business = resolve_business(request)
+        customer_qs = Customer.objects.all()
+        if business is not None:
+            customer_qs = customer_qs.filter(business=business)
         if customer_phone:
-            customer = Customer.objects.filter(phone=customer_phone).first()
+            customer = customer_qs.filter(phone=customer_phone).first()
         if not customer:
-            customer = Customer.objects.filter(name__iexact=customer_name).first()
+            customer = customer_qs.filter(name__iexact=customer_name).first()
         if not customer:
-            customer = customer_serializer.save()
+            customer = (
+                customer_serializer.save(business=business)
+                if business is not None
+                else customer_serializer.save()
+            )
 
         invoice = invoice_serializer.save(
             customer=customer,
             created_by=request.user,
             paid_by=request.user if invoice_serializer.validated_data.get('status', 'pending') == 'paid' else None,
+            **({'business': business} if business is not None else {}),
         )
+        if business is not None and invoice.items.exists():
+            from ..services.inventory import post_sale
+
+            try:
+                post_sale(invoice, user=request.user)
+            except ValueError as exc:
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError({'detail': str(exc)}) from exc
 
         if submission is not None:
             submission.invoice = invoice

@@ -18,6 +18,7 @@ import {
   Spinner,
 } from "../components/ui";
 import { formatApiError } from "../utils/apiError";
+import { useBusiness } from "../lib/business";
 
 const fmt = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
@@ -99,6 +100,8 @@ const ServiceModal = ({
   loading,
   error,
 }: ServiceModalProps) => {
+  const { current: currentBusiness } = useBusiness();
+  const itemLabel = currentBusiness?.terminology?.item ?? "خدمت";
   const [form, setForm] = useState<ServiceFormState>(
     (initial as ServiceFormState | null) || emptyForm,
   );
@@ -109,18 +112,18 @@ const ServiceModal = ({
     <Modal
       isOpen
       onClose={onClose}
-      title={initial?.id ? "ویرایش خدمت" : "افزودن خدمت جدید"}
+      title={initial?.id ? `ویرایش ${itemLabel}` : `افزودن ${itemLabel} جدید`}
       size="md"
       dismissible={!loading}
     >
       <ErrorNotice message={error} />
       <div className="space-y-4">
-        <F label="عنوان خدمت *">
+        <F label={`عنوان ${itemLabel} *`}>
           <input
             className={inp}
             value={form.title}
             onChange={(e) => set("title", toPersianKeyboard(e.target.value))}
-            placeholder="عنوان خدمت"
+            placeholder={`عنوان ${itemLabel}`}
           />
         </F>
         <F label="توضیحات">
@@ -238,6 +241,10 @@ const ServiceModal = ({
 
 // ── Main ──────────────────────────────────────────────────────
 const Services = () => {
+  // The catalog page speaks the current trade's words: a shop manages
+  // کالاها, a restaurant its menu items, a salon its خدمات.
+  const { current: currentBusiness } = useBusiness();
+  const itemLabel = currentBusiness?.terminology?.item ?? "خدمات";
   const queryClient = useQueryClient();
   const { data, isFetching, error: loadError, refetch } = useServices();
   const list = (data ?? []) as ServiceRow[];
@@ -318,8 +325,10 @@ const Services = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">⚙️ خدمات</h2>
-          <p className="text-slate-400 text-sm mt-1">مدیریت خدمات و تعرفه‌ها</p>
+          <h2 className="text-2xl font-bold text-white">⚙️ {itemLabel}</h2>
+          <p className="text-slate-400 text-sm mt-1">
+            مدیریت {itemLabel} و تعرفه‌ها
+          </p>
         </div>
         <button
           onClick={() => {
@@ -328,7 +337,7 @@ const Services = () => {
           }}
           className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 px-5 py-2.5 text-sm"
         >
-          + افزودن خدمت
+          {`+ افزودن ${itemLabel}`}
         </button>
       </div>
 

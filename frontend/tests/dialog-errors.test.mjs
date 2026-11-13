@@ -38,7 +38,7 @@ async function loadComponents(relative, extraExports = "", environment = {}) {
           }));
           plugin.onLoad({ filter: /.*/, namespace: "api-fixture" }, () => ({
             contents:
-              "export const chequesAPI = globalThis.__api?.chequesAPI ?? {}; export const customersAPI = {}; export const servicesAPI = globalThis.__api?.servicesAPI ?? {};",
+              "export const chequesAPI = globalThis.__api?.chequesAPI ?? {}; export const customersAPI = {}; export const servicesAPI = globalThis.__api?.servicesAPI ?? {}; export const businessesAPI = { list: () => Promise.resolve({ data: [] }) }; export const BUSINESS_STORAGE_KEY = 'mohaseb-erp:business-id';",
           }));
           if (extraExports)
             plugin.onLoad(
@@ -147,6 +147,9 @@ function hookState(firstState, overrides = {}) {
     react: {
       ...React,
       useEffect: noOp,
+      // No provider in these harnesses: return the context's default
+      // value (e.g. BusinessContext's "no business selected" default).
+      useContext: (context) => context._currentValue,
       useRef: (initial) => {
         const index = cursor++;
         return (slots[index] ??= { current: initial });
@@ -231,7 +234,7 @@ for (const page of ["Services", "Cheques"]) {
           element.type === "button" &&
           (operation === "save"
             ? String(element.props.children).includes(
-                page === "Services" ? "افزودن خدمت" : "ثبت چک جدید",
+                page === "Services" ? "افزودن خدمات" : "ثبت چک جدید",
               )
             : element.props.title === "حذف" ||
               String(element.props.children).includes("حذف")),
