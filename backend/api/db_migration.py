@@ -26,6 +26,9 @@ file (see core/db_config.py); the wizard disables itself in that case.
 import json
 import logging
 import os
+import re
+import secrets
+import string
 from pathlib import Path
 
 from django.conf import settings
@@ -222,6 +225,222 @@ def start_migration(params):
         },
     )
     return counts
+
+
+# --- Automatic provisioning (first-run setup wizard) -------------------
+#
+# The wizard can also CREATE the database and its dedicated user, so a
+# first-run install never needs pgAdmin/psql. The flow, designed so the
+# powerful credential never becomes the running configuration:
+#
+# * the server-admin credential (usually ``postgres``) is used for this
+#   one request only, in memory — it is never stored, logged or echoed;
+# * the application gets its OWN least-privilege role (plain LOGIN, no
+#   SUPERUSER/CREATEDB) that owns only its own database;
+# * the application password is generated here with ``secrets`` and is
+#   persisted only Fernet-encrypted inside ``.db_config.json`` (via
+#   start_migration) — it is never shown to anyone, not even the person
+#   running the wizard;
+# * nothing destructive: an existing database or role is refused, and
+#   if staging fails after creation, what was created is dropped again.
+
+_IDENTIFIER_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,62}$')
+_PASSWORD_ALPHABET = string.ascii_letters + string.digits
+
+
+def clean_admin_params(data):
+    """Validate the automatic-provisioning form; ValueError in Persian.
+
+    Database and user names become DDL identifiers, which cannot be
+    bound as query parameters — hence the strict whitelist: letters,
+    digits and underscore, never starting with a digit. Only names
+    passing it are ever interpolated (quoted) into CREATE statements.
+    """
+    host = str(data.get('host') or 'localhost').strip() or 'localhost'
+    try:
+        port = int(data.get('port') or 5432)
+    except (TypeError, ValueError):
+        raise ValueError('پورت باید یک عدد باشد.')
+    if not 1 <= port <= 65535:
+        raise ValueError('پورت باید بین ۱ تا ۶۵۵۳۵ باشد.')
+    admin_user = str(data.get('admin_user') or 'postgres').strip()
+    if not admin_user:
+        raise ValueError('نام کاربری مدیر PostgreSQL الزامی است.')
+    admin_password = str(data.get('admin_password') or '')
+    if not admin_password:
+        raise ValueError('رمز مدیر PostgreSQL الزامی است.')
+    name = str(data.get('name') or '').strip()
+    if not _IDENTIFIER_RE.match(name):
+        raise ValueError(
+            'نام دیتابیس فقط می‌تواند شامل حروف لاتین، عدد و _ باشد و '
+            'باید با حرف یا _ شروع شود.'
+        )
+    user = str(data.get('user') or name).strip()
+    if not _IDENTIFIER_RE.match(user):
+        raise ValueError(
+            'نام کاربر دیتابیس فقط می‌تواند شامل حروف لاتین، عدد و _ '
+            'باشد و باید با حرف یا _ شروع شود.'
+        )
+    return {
+        'host': host,
+        'port': port,
+        'admin_user': admin_user,
+        'admin_password': admin_password,
+        'name': name,
+        'user': user,
+    }
+
+
+def _generate_app_password():
+    # Letters and digits only: the value is interpolated as a quoted
+    # literal into CREATE USER, and this alphabet contains no character
+    # that could terminate or escape the literal.
+    return ''.join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(32))
+
+
+def _quoted_identifier(value):
+    # Values reaching here already passed _IDENTIFIER_RE (no quote
+    # characters possible); quoting is defence in depth.
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _admin_connect(admin_params, dbname='postgres'):
+    import psycopg
+
+    return psycopg.connect(
+        host=admin_params['host'],
+        port=admin_params['port'],
+        dbname=dbname,
+        user=admin_params['admin_user'],
+        password=admin_params['admin_password'],
+        connect_timeout=5,
+        autocommit=True,  # CREATE DATABASE cannot run in a transaction
+    )
+
+
+def provision_database(admin_params):
+    """Create the app role + database; returns the app connection params.
+
+    Raises ValueError with a Persian message. Refuses (creating
+    nothing) when the database or role already exists, and rolls back
+    its own creations if a later step fails, so a retry never trips
+    over orphans whose generated password nobody knows.
+    """
+    try:
+        connection = _admin_connect(admin_params)
+    except Exception as error:
+        raise ValueError(_friendly_pg_error(error))
+    app_password = _generate_app_password()
+    created_user = False
+    created_db = False
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'SELECT 1 FROM pg_database WHERE datname = %s',
+                [admin_params['name']],
+            )
+            if cursor.fetchone():
+                raise ValueError(
+                    'دیتابیسی با این نام از قبل روی سرور وجود دارد؛ نام '
+                    'دیگری انتخاب کنید یا حالت «دیتابیس آماده» را به کار '
+                    'ببرید.'
+                )
+            cursor.execute(
+                'SELECT 1 FROM pg_roles WHERE rolname = %s',
+                [admin_params['user']],
+            )
+            if cursor.fetchone():
+                raise ValueError(
+                    'کاربری با این نام از قبل روی سرور وجود دارد؛ نام '
+                    'دیگری انتخاب کنید یا حالت «دیتابیس آماده» را به کار '
+                    'ببرید.'
+                )
+            cursor.execute(
+                f'CREATE USER {_quoted_identifier(admin_params["user"])} '
+                f"WITH LOGIN PASSWORD '{app_password}'"
+            )
+            created_user = True
+            cursor.execute(
+                f'CREATE DATABASE {_quoted_identifier(admin_params["name"])} '
+                f'OWNER {_quoted_identifier(admin_params["user"])}'
+            )
+            created_db = True
+    except ValueError:
+        connection.close()
+        raise
+    except Exception as error:
+        try:
+            with connection.cursor() as cursor:
+                if created_db:
+                    cursor.execute(
+                        f'DROP DATABASE IF EXISTS '
+                        f'{_quoted_identifier(admin_params["name"])}'
+                    )
+                if created_user:
+                    cursor.execute(
+                        f'DROP USER IF EXISTS '
+                        f'{_quoted_identifier(admin_params["user"])}'
+                    )
+        except Exception:
+            logger.warning('Provisioning rollback incomplete', exc_info=True)
+        connection.close()
+        raise ValueError(_friendly_pg_error(error))
+    connection.close()
+    app_params = {
+        'host': admin_params['host'],
+        'port': admin_params['port'],
+        'name': admin_params['name'],
+        'user': admin_params['user'],
+        'password': app_password,
+    }
+    ok, error, _stats = test_pg_connection(app_params)
+    if not ok:
+        _drop_provisioned(admin_params)
+        raise ValueError(error)
+    return app_params
+
+
+def _drop_provisioned(admin_params):
+    """Best-effort removal of what provision_database created."""
+    try:
+        connection = _admin_connect(admin_params)
+    except Exception:
+        logger.warning('Could not reconnect to drop provisioned database', exc_info=True)
+        return
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'DROP DATABASE IF EXISTS {_quoted_identifier(admin_params["name"])}'
+            )
+            cursor.execute(
+                f'DROP USER IF EXISTS {_quoted_identifier(admin_params["user"])}'
+            )
+    except Exception:
+        logger.warning('Dropping provisioned database failed', exc_info=True)
+    finally:
+        connection.close()
+
+
+def provision_and_stage(admin_params):
+    """Provision, then stage the switch exactly like a manual target.
+
+    If staging fails, the fresh database and role are dropped again:
+    their generated password exists only inside the staged config, so
+    leaving them behind would strand an unreachable database.
+    """
+    app_params = provision_database(admin_params)
+    try:
+        return start_migration(app_params)
+    except ValueError:
+        _drop_provisioned(admin_params)
+        raise
+    except Exception:
+        _drop_provisioned(admin_params)
+        logger.exception('Staging after provisioning failed')
+        raise ValueError(
+            'ذخیرهٔ تنظیمات دیتابیس ناموفق بود و دیتابیس ساخته‌شده پاک '
+            'شد؛ دوباره تلاش کنید.'
+        )
 
 
 def cancel_or_rollback():
