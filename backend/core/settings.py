@@ -27,33 +27,33 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.environ.get('DJANGO_DEBUG', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# A random per-process key is fine for local development, but in production it
-# would silently invalidate every JWT/session on each restart, so fail fast.
+# Resolution order: the DJANGO_SECRET_KEY environment variable, then
+# the per-install key persisted in backend/.secret_key (the file
+# run_production.bat loads and the dev fallback below maintains), so
+# every launcher converges on ONE stable key for the install. Only a
+# truly fresh install with no key anywhere fails fast when DEBUG is
+# off — a random per-process key there would silently invalidate
+# every JWT/session on each restart and orphan everything encrypted
+# under it (api/secret_store derives its Fernet key from SECRET_KEY).
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+_secret_key_file = BASE_DIR / '.secret_key'
+if not SECRET_KEY:
+    try:
+        SECRET_KEY = _secret_key_file.read_text(encoding='utf-8').strip()
+    except OSError:
+        SECRET_KEY = ''
 if not SECRET_KEY:
     if not DEBUG:
         raise ImproperlyConfigured(
             'DJANGO_SECRET_KEY must be set when DJANGO_DEBUG is off. '
             'See .env.example in the repository root.'
         )
-    # Dev fallback: generate the key ONCE and persist it in
-    # backend/.secret_key — the same gitignored file run_production.bat
-    # maintains (it loads the file into DJANGO_SECRET_KEY, so both paths
-    # converge on one stable key). A fresh random key per boot silently
-    # orphaned everything encrypted under it: the cloud-backup secrets
-    # (api/secret_store derives its Fernet key from SECRET_KEY) read back
-    # as "not saved" after every restart, and sessions died with it.
-    _secret_key_file = BASE_DIR / '.secret_key'
+    # Dev fallback: generate the key ONCE and persist it (see above).
+    SECRET_KEY = secrets.token_urlsafe(50)
     try:
-        SECRET_KEY = _secret_key_file.read_text(encoding='utf-8').strip()
+        _secret_key_file.write_text(SECRET_KEY, encoding='utf-8')
     except OSError:
-        SECRET_KEY = ''
-    if not SECRET_KEY:
-        SECRET_KEY = secrets.token_urlsafe(50)
-        try:
-            _secret_key_file.write_text(SECRET_KEY, encoding='utf-8')
-        except OSError:
-            pass  # Read-only tree: keep the per-boot key for this run only.
+        pass  # Read-only tree: keep the per-boot key for this run only.
 
 ALLOWED_HOSTS = [
     host.strip()
