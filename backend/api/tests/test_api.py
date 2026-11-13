@@ -56,9 +56,16 @@ class LoginThrottleTests(AuthenticatedTestCase):
     """Uses the production rate from settings: ``login = 5/min``."""
 
     def test_login_is_throttled_after_repeated_attempts(self):
-        for _ in range(5):
+        for _ in range(2):
             response = self.client.post('/api/token/', {'username': 'operator', 'password': 'wrong'}, format='json')
             self.assertEqual(response.status_code, 401)
+        # After two failures the progressive CAPTCHA gate answers first
+        # (400 + captcha_required); those requests still count toward
+        # the throttle, so the sixth request is rate-limited.
+        for _ in range(3):
+            response = self.client.post('/api/token/', {'username': 'operator', 'password': 'wrong'}, format='json')
+            self.assertEqual(response.status_code, 400)
+            self.assertTrue(response.data.get('captcha_required'))
         response = self.client.post('/api/token/', {'username': 'operator', 'password': 'wrong'}, format='json')
         self.assertEqual(response.status_code, 429)
 

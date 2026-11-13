@@ -208,6 +208,7 @@ REST_FRAMEWORK = {
         'login': '5/min',
         'token_refresh': '30/min',
         'setup': '20/hour',
+        'registration': '60/hour',
     },
 }
 
@@ -258,5 +259,23 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 # frontend and the uploaded media on the same port as the API, so a single
 # Daphne process runs the whole app in production (see run_production.bat).
 SERVE_FRONTEND = _env_flag('DJANGO_SERVE_FRONTEND')
+
+# --- Outgoing email (one-time codes: verification, reset, OTP login) ---
+# Without EMAIL_HOST the console backend prints messages to the server
+# log, which keeps the flows testable on a LAN install. Configure SMTP
+# through the environment to deliver real mail.
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '').strip()
+if EMAIL_HOST:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+    EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+    EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}
+    EMAIL_TIMEOUT = 10
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'EMAIL_FROM', 'محاسب ERP <no-reply@localhost>',
+)
 FRONTEND_DIST = Path(os.environ.get('DJANGO_FRONTEND_DIST', BASE_DIR.parent / 'frontend' / 'dist'))
 BACKUP_SCHEDULER_ENABLED = os.environ.get('DJANGO_BACKUP_SCHEDULER_ENABLED', 'true').strip().lower() in {'1', 'true', 'yes', 'on'}

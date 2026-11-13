@@ -3,6 +3,8 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { logout } from "../features/authSlice";
 import { invoicesAPI, chatAPI, authAPI } from "../services/api";
+import { queryClient } from "../lib/queryClient";
+import { BUSINESS_STORAGE_KEY } from "../services/api";
 import { hasModule } from "../utils/modules";
 import type { ModuleName } from "../utils/modules";
 
@@ -195,6 +197,13 @@ const Sidebar = ({
       /* Offline or expired session. */
     }
     dispatch(logout());
+    // Leave no per-user state behind for the next sign-in on this
+    // browser: cached server data and the selected business belong
+    // to the session that just ended. (The offline invoice queue is
+    // kept on purpose — those are unsent documents, pinned to their
+    // business, and the server re-validates membership on flush.)
+    queryClient.clear();
+    localStorage.removeItem(BUSINESS_STORAGE_KEY);
     navigate("/login");
   };
 

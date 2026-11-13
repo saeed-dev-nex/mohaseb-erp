@@ -372,7 +372,16 @@ class UserViewSet(viewsets.ModelViewSet):
     def me(self, request):
         """Return current logged-in user info with role"""
         serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+        data = dict(serializer.data)
+        from ..password_policy import PASSWORD_MAX_AGE_DAYS
+        from ..services.accounts import get_security_profile, password_age_days
+
+        profile = get_security_profile(request.user)
+        age = password_age_days(request.user)
+        data['email_verified'] = profile.email_verified
+        data['password_age_days'] = age
+        data['password_change_due'] = age >= PASSWORD_MAX_AGE_DAYS
+        return Response(data)
 
     @action(detail=True, methods=['get', 'put'], permission_classes=[IsSuperuser])
     def module_access(self, request, pk=None):

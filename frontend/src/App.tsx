@@ -12,6 +12,9 @@ import { hasModule } from "./utils/modules";
 import { setupAPI } from "./services/api";
 import type { ModuleName } from "./utils/modules";
 const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const CreateBusiness = lazy(() => import("./pages/CreateBusiness"));
 const SetupWizard = lazy(() => import("./pages/SetupWizard"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Customers = lazy(() => import("./pages/Customers"));
@@ -119,6 +122,8 @@ function App() {
           <Routes>
             <Route path="/setup" element={<SetupWizard />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route
               path="/"
               element={
@@ -128,6 +133,7 @@ function App() {
               }
             >
               <Route index element={<Dashboard />} />
+              <Route path="create-business" element={<CreateBusiness />} />
 
               {/* Customers */}
               <Route

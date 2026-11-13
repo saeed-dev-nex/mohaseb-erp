@@ -932,7 +932,7 @@ class BusinessSerializer(serializers.ModelSerializer):
 # Mohaseb ERP — accounting (phase 1)
 # ---------------------------------------------------------------------------
 
-from .models import Account, JournalEntry, JournalLine
+from .models import Account, JournalEntry, JournalLine, RegistrationCode
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -1060,6 +1060,25 @@ class JournalEntrySerializer(serializers.ModelSerializer):
             for line in lines:
                 JournalLine.objects.create(entry=instance, **line)
         return instance
+
+
+class RegistrationCodeSerializer(serializers.ModelSerializer):
+    status = serializers.CharField(read_only=True)
+    used_by_username = serializers.CharField(
+        source='used_by.username', read_only=True, default='',
+    )
+    created_by_username = serializers.CharField(
+        source='created_by.username', read_only=True, default='',
+    )
+
+    class Meta:
+        model = RegistrationCode
+        fields = [
+            'id', 'code_hint', 'note', 'status', 'created_by',
+            'created_by_username', 'created_at', 'expires_at',
+            'used_at', 'used_by', 'used_by_username', 'revoked',
+        ]
+        read_only_fields = fields
 
 
 # ---------------------------------------------------------------------------

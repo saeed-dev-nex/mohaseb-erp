@@ -6,6 +6,7 @@ import Navbar from "./Navbar";
 import QuickInvoiceModal from "./QuickInvoiceModal";
 import InvoiceEditRequestAlerts from "./InvoiceEditRequestAlerts";
 import UpdateBanner from "./UpdateBanner";
+import AccountBanners from "./AccountBanners";
 import WelcomeModal from "./WelcomeModal";
 import {
   backupConfigAPI,
@@ -515,6 +516,7 @@ const Layout = () => {
       >
         <Navbar onMenuToggle={() => setSidebarOpen((prev) => !prev)} />
         <UpdateBanner />
+        <AccountBanners />
         <main className="flex-1 p-6">
           <Outlet />
         </main>

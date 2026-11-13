@@ -1640,3 +1640,90 @@ class DepreciationLine(models.Model):
         ordering = ['asset__code']
         verbose_name = 'سطر استهلاک'
         verbose_name_plural = 'سطرهای استهلاک'
+
+
+# ---------------------------------------------------------------------------
+# Self-service registration (license-gated) + account security
+# ---------------------------------------------------------------------------
+
+class RegistrationCode(models.Model):
+    """کد مجوز یکبارمصرف ثبت‌نام.
+
+    The platform owner (superuser) generates codes and hands them to
+    customers; each code lets exactly one person create an account.
+    Only the SHA-256 hash is stored — the plain code is shown once,
+    at generation time.
+    """
+
+    code_hash = models.CharField(max_length=64, unique=True, verbose_name='هش کد')
+    code_hint = models.CharField(max_length=8, verbose_name='نمایش کد')
+    note = models.CharField(max_length=200, blank=True, default='', verbose_name='یادداشت')
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='registration_codes_created', verbose_name='ساختهٔ',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='ساخته‌شده در')
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name='انقضا')
+    used_at = models.DateTimeField(null=True, blank=True, verbose_name='مصرف‌شده در')
+    used_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='registration_code_used', verbose_name='مصرف‌کننده',
+    )
+    revoked = models.BooleanField(default=False, verbose_name='باطل‌شده')
+
+    class Meta:
+        ordering = ['-id']
+        verbose_name = 'کد ثبت‌نام'
+        verbose_name_plural = 'کدهای ثبت‌نام'
+
+    @property
+    def status(self):
+        if self.revoked:
+            return 'revoked'
+        if self.used_at is not None:
+            return 'used'
+        if self.expires_at is not None and self.expires_at <= timezone.now():
+            return 'expired'
+        return 'available'
+
+
+class OneTimeCode(models.Model):
+    """کد یکبارمصرف ایمیلی: تأیید ایمیل، بازیابی رمز، ورود با کد."""
+
+    PURPOSE_CHOICES = [
+        ('verify_email', 'تأیید ایمیل'),
+        ('password_reset', 'بازیابی رمز عبور'),
+        ('login_otp', 'ورود با کد تأیید'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='one_time_codes',
+        verbose_name='کاربر',
+    )
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, verbose_name='کاربرد')
+    code_hash = models.CharField(max_length=64, verbose_name='هش کد')
+    sent_to = models.CharField(max_length=254, verbose_name='ارسال‌شده به')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='ساخته‌شده در')
+    expires_at = models.DateTimeField(verbose_name='انقضا')
+    attempts = models.PositiveSmallIntegerField(default=0, verbose_name='تلاش‌ها')
+    consumed_at = models.DateTimeField(null=True, blank=True, verbose_name='مصرف‌شده در')
+
+    class Meta:
+        ordering = ['-id']
+        verbose_name = 'کد یکبارمصرف'
+        verbose_name_plural = 'کدهای یکبارمصرف'
+
+
+class UserSecurityProfile(models.Model):
+    """وضعیت امنیتی حساب: سن رمز و تأیید ایمیل."""
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='security_profile',
+        verbose_name='کاربر',
+    )
+    password_changed_at = models.DateTimeField(default=timezone.now, verbose_name='آخرین تغییر رمز')
+    email_verified = models.BooleanField(default=False, verbose_name='ایمیل تأیید شده')
+
+    class Meta:
+        verbose_name = 'پروفایل امنیتی کاربر'
+        verbose_name_plural = 'پروفایل‌های امنیتی کاربران'
