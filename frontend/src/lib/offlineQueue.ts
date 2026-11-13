@@ -12,6 +12,13 @@ export type QueuedQuickInvoice = {
   key: string;
   payload: Record<string, unknown>;
   queuedAt: number;
+  // The business the draft belongs to, pinned at enqueue time: the
+  // flush may run after the operator switched businesses, and the
+  // invoice must still land in the business it was drafted in.
+  businessId?: number | null;
+  // Server-rejection count; a permanently rejected entry is dropped
+  // after a few attempts instead of being re-POSTed forever.
+  attempts?: number;
 };
 
 const DB_NAME = "mohaseb-offline";
@@ -70,8 +77,12 @@ export async function countQueuedQuickInvoices(): Promise<number> {
 }
 
 // Send every queued invoice, oldest first. Returns the invoice numbers
-// that were accepted. Stops at the first network failure (still offline);
-// server rejections keep their item queued so nothing is silently lost.
+// that were accepted. Stops at the first network failure (still
+// offline); server rejections keep their item queued (with an attempt
+// counter) so nothing is silently lost — but a permanently rejected
+// entry is dropped after MAX_SERVER_ATTEMPTS instead of looping.
+const MAX_SERVER_ATTEMPTS = 5;
+
 export async function flushQuickInvoiceQueue(): Promise<string[]> {
   const items = await listQueuedQuickInvoices().catch(
     () => [] as QueuedQuickInvoice[],
@@ -79,13 +90,24 @@ export async function flushQuickInvoiceQueue(): Promise<string[]> {
   const flushed: string[] = [];
   for (const item of items) {
     try {
-      const { data } = await invoicesAPI.quickCreate(item.payload);
+      const { data } = await invoicesAPI.quickCreate(
+        item.payload,
+        item.businessId
+          ? { headers: { "X-Business-Id": String(item.businessId) } }
+          : undefined,
+      );
       await removeQueuedQuickInvoice(item.key);
       if (data?.invoice?.invoice_number) {
         flushed.push(String(data.invoice.invoice_number));
       }
     } catch (e) {
       if (!(e as { response?: unknown })?.response) break;
+      const attempts = (item.attempts ?? 0) + 1;
+      if (attempts >= MAX_SERVER_ATTEMPTS) {
+        await removeQueuedQuickInvoice(item.key).catch(() => {});
+      } else {
+        await enqueueQuickInvoice({ ...item, attempts }).catch(() => {});
+      }
     }
   }
   return flushed;

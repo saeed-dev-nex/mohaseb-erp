@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
+  BUSINESS_STORAGE_KEY,
   invoicesAPI,
   servicesAPI,
   servicePackagesAPI,
@@ -712,6 +713,15 @@ const QuickInvoiceModal = ({
             key: payload.idempotency_key,
             payload,
             queuedAt: Date.now(),
+            businessId: (() => {
+              try {
+                const raw = localStorage.getItem(BUSINESS_STORAGE_KEY);
+                const parsed = raw ? Number(raw) : NaN;
+                return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+              } catch {
+                return null;
+              }
+            })(),
           });
           setQueuedOffline(true);
           window.dispatchEvent(new Event("mohaseb:queue-updated"));

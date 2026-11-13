@@ -55,6 +55,17 @@ goto end
 
 :start
 echo Starting Application (Production Build)...
+if not exist "%FRONTEND%\dist\index.html" (
+    echo [INFO] No production build found - building the frontend first...
+    pushd "%FRONTEND%"
+    call npm run build
+    if errorlevel 1 (
+        echo [ERROR] Frontend build failed.
+        pause
+        goto end
+    )
+    popd
+)
 set "CMD_FE_PREV=cd /d %FRONTEND% && npm run preview"
 start "Mohaseb Backend" cmd /k ""%BACKEND%\run_backend.bat" runserver"
 start "Mohaseb Frontend (Preview)" cmd /k "%CMD_FE_PREV%"

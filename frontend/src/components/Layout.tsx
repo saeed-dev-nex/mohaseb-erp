@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import Sidebar from "./Sidebar";
 import Navbar from "./Navbar";
 import QuickInvoiceModal from "./QuickInvoiceModal";
@@ -15,6 +15,8 @@ import {
   welcomeAPI,
 } from "../services/api";
 import api from "../services/api";
+import { setCurrentUser } from "../features/authSlice";
+import { useBusiness } from "../lib/business";
 import { hasModule } from "../utils/modules";
 import { startVisibilityPoll } from "../utils/visibilityPoll";
 import {
@@ -295,6 +297,23 @@ const Layout = () => {
   const [quickInvoice, setQuickInvoice] = useState(false);
   const [offlinePending, setOfflinePending] = useState(0);
   const [offlineFlushed, setOfflineFlushed] = useState<string[]>([]);
+
+  const dispatch = useDispatch();
+  const { refresh: refreshBusinesses } = useBusiness();
+
+  // Entering the signed-in shell: the business provider fetched once
+  // at app mount — before login there was no session, so its list is
+  // empty until now — and the stored profile is revalidated, since
+  // roles/modules may have changed since login (or the stored user
+  // may belong to a different database entirely).
+  React.useEffect(() => {
+    void refreshBusinesses();
+    api
+      .get("users/me/")
+      .then((res) => dispatch(setCurrentUser(res.data)))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Offline quick-invoice queue: flush on mount and on reconnect, and
   // keep the pending count fresh (the quick-invoice modal announces new

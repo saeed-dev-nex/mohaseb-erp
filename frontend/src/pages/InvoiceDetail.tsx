@@ -106,6 +106,12 @@ const InvoiceDetail = () => {
           "⚠️ رند دستی قبلی با تغییر مبلغ فاکتور حذف شد؛ در صورت تمایل مبلغ جدید را دوباره وارد کنید.",
         );
       }
+      if (sessionStorage.getItem("mohaseb:upload-warning") === "1") {
+        sessionStorage.removeItem("mohaseb:upload-warning");
+        setRoundingMsg(
+          "⚠️ فاکتور ثبت شد، اما بارگذاری یک یا چند پیوست ناموفق بود؛ پیوست‌ها را از بخش اسناد همین صفحه دوباره بارگذاری کنید.",
+        );
+      }
     } catch {
       /* storage blocked: non-fatal */
     }

@@ -72,22 +72,31 @@ const ModuleRoute = ({
 };
 
 // First-run gate: while no superuser exists, every path leads to the
-// setup wizard. Fails open (normal app) if the status check errors.
+// setup wizard. A failed status probe is retried briefly (the page can
+// load a second before the backend finishes starting); if it stays
+// unreachable the gate stays undecided ("unknown") and renders the app
+// without bouncing /setup to /login on a guess.
 const SetupGate = ({ children }: { children: ReactNode }) => {
-  const [state, setState] = useState<"checking" | "setup" | "ready">(
-    "checking",
-  );
+  const [state, setState] = useState<
+    "checking" | "setup" | "ready" | "unknown"
+  >("checking");
   const location = useLocation();
   useEffect(() => {
     let alive = true;
-    setupAPI
-      .status()
-      .then((res) => {
-        if (alive) setState(res.data.needs_setup ? "setup" : "ready");
-      })
-      .catch(() => {
-        if (alive) setState("ready");
-      });
+    (async () => {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          const res = await setupAPI.status();
+          if (alive) setState(res.data.needs_setup ? "setup" : "ready");
+          return;
+        } catch {
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, 800));
+          }
+        }
+      }
+      if (alive) setState("unknown");
+    })();
     return () => {
       alive = false;
     };

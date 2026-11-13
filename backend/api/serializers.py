@@ -413,6 +413,40 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
+    def _item_business(self):
+        """The business this invoice item will belong to, if resolvable.
+
+        From the caller's header context, or (on updates) from the
+        invoice being edited via the root serializer's instance.
+        """
+        request = self.context.get('request') if getattr(self, 'context', None) else None
+        if request is not None:
+            from .business_context import resolve_business
+
+            business = resolve_business(request)
+            if business is not None:
+                return business
+        instance = getattr(self.root, 'instance', None)
+        if instance is not None and getattr(instance, 'business_id', None):
+            return instance.business
+        return None
+
+    def validate_product(self, value):
+        business = self._item_business()
+        if value is not None and business is not None and value.business_id != business.id:
+            raise serializers.ValidationError('کالای انتخاب‌شده متعلق به کسب‌وکار جاری نیست.')
+        return value
+
+    def validate_service(self, value):
+        business = self._item_business()
+        if (
+            value is not None
+            and business is not None
+            and value.business_id not in (None, business.id)
+        ):
+            raise serializers.ValidationError('خدمت انتخاب‌شده متعلق به کسب‌وکار جاری نیست.')
+        return value
+
     class Meta:
         model = InvoiceItem
         fields = [
@@ -912,7 +946,7 @@ class AccountSerializer(serializers.ModelSerializer):
             'level', 'level_label', 'nature', 'is_active', 'is_system',
             'created_at',
         ]
-        read_only_fields = ['business', 'is_system', 'created_at']
+        read_only_fields = ['business', 'level', 'is_system', 'created_at']
 
     def get_level_label(self, obj):
         return Account.LEVEL_LABELS.get(obj.level, '')
@@ -968,9 +1002,20 @@ class JournalEntrySerializer(serializers.ModelSerializer):
             return ''
         return obj.created_by.get_full_name() or obj.created_by.username
 
+    def _entry_business(self):
+        if self.instance is not None:
+            return self.instance.business
+        request = self.context.get('request') if getattr(self, 'context', None) else None
+        if request is not None:
+            from .business_context import resolve_business
+
+            return resolve_business(request)
+        return None
+
     def validate_lines(self, lines):
         if len(lines) < 2:
             raise serializers.ValidationError('سند حسابداری باید دست‌کم دو سطر داشته باشد.')
+        business = self._entry_business()
         for line in lines:
             debit = line.get('debit') or 0
             credit = line.get('credit') or 0
@@ -983,18 +1028,31 @@ class JournalEntrySerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f'حساب «{account.code} — {account.title}» معین یا تفصیلی نیست و سند نمی‌خورد.'
                 )
+            if business is not None and account is not None and account.business_id != business.id:
+                raise serializers.ValidationError('حساب انتخاب‌شده متعلق به این کسب‌وکار نیست.')
+            party = line.get('party')
+            if (
+                business is not None
+                and party is not None
+                and party.business_id not in (None, business.id)
+            ):
+                raise serializers.ValidationError('طرف‌حساب انتخاب‌شده متعلق به این کسب‌وکار نیست.')
         return lines
 
     def create(self, validated_data):
-        lines = validated_data.pop('lines')
-        entry = JournalEntry.objects.create(**validated_data)
+        lines = validated_data.get('lines') or []
+        entry = JournalEntry.objects.create(
+            **{key: value for key, value in validated_data.items() if key != 'lines'}
+        )
         for line in lines:
             JournalLine.objects.create(entry=entry, **line)
         return entry
 
     def update(self, instance, validated_data):
-        lines = validated_data.pop('lines', None)
+        lines = validated_data.get('lines', None)
         for field, value in validated_data.items():
+            if field == 'lines':
+                continue
             setattr(instance, field, value)
         instance.save()
         if lines is not None:
@@ -1096,15 +1154,19 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
         return lines
 
     def create(self, validated_data):
-        lines = validated_data.pop('lines')
-        purchase = PurchaseInvoice.objects.create(**validated_data)
+        lines = validated_data.get('lines') or []
+        purchase = PurchaseInvoice.objects.create(
+            **{key: value for key, value in validated_data.items() if key != 'lines'}
+        )
         for line in lines:
             PurchaseLine.objects.create(purchase=purchase, **line)
         return purchase
 
     def update(self, instance, validated_data):
-        lines = validated_data.pop('lines', None)
+        lines = validated_data.get('lines', None)
         for field, value in validated_data.items():
+            if field == 'lines':
+                continue
             setattr(instance, field, value)
         instance.save()
         if lines is not None:
@@ -1168,6 +1230,11 @@ class PayslipSerializer(serializers.ModelSerializer):
             'insurance_employee', 'insurance_employer', 'taxable_income',
             'tax', 'net', 'created_at', 'updated_at',
         ]
+        extra_kwargs = {
+            'overtime_hours': {'min_value': 0},
+            'other_additions': {'min_value': 0},
+            'other_deductions': {'min_value': 0},
+        }
 
 
 class PayrollPeriodSerializer(serializers.ModelSerializer):

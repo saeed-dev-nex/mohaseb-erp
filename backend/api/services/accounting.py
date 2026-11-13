@@ -126,6 +126,28 @@ def account_by_code(business, code):
     return account
 
 
+def retry_on_number_conflict(factory, attempts=3):
+    """Run ``factory()`` retrying the Max+1 numbering race.
+
+    Document numbers are assigned as ``Max(number) + 1`` per business
+    and fiscal year, guarded by a unique constraint. On PostgreSQL two
+    operators saving at the same moment can read the same Max; the
+    loser's insert raises IntegrityError. Each attempt runs in its own
+    atomic block (a savepoint when nested), so a conflict rolls back
+    cleanly and the number is recomputed on the next attempt.
+    """
+    from django.db import IntegrityError, transaction
+
+    last_error = None
+    for _ in range(attempts):
+        try:
+            with transaction.atomic():
+                return factory()
+        except IntegrityError as error:
+            last_error = error
+    raise last_error
+
+
 def create_posted_entry(business, date, description, lines_spec, reference=''):
     """Create a journal entry and post it in one step (auto-journals).
 
@@ -149,7 +171,7 @@ def create_posted_entry(business, date, description, lines_spec, reference=''):
     ).first() or business.current_fiscal_year
     if fiscal_year is None:
         raise ValueError('سال مالی برای ثبت سند یافت نشد.')
-    with transaction.atomic():
+    def _create():
         last = (
             JournalEntry.objects.filter(business=business, fiscal_year=fiscal_year)
             .aggregate(value=Max('number'))['value'] or 0
@@ -167,4 +189,6 @@ def create_posted_entry(business, date, description, lines_spec, reference=''):
                 entry=entry, account=account, party=party,
                 description=line_desc, debit=debit, credit=credit,
             )
-    return entry
+        return entry
+
+    return retry_on_number_conflict(_create)

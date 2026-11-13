@@ -1446,9 +1446,9 @@ class Payslip(models.Model):
         verbose_name='پروندهٔ استخدامی',
     )
     days_worked = models.PositiveSmallIntegerField(default=30, verbose_name='روز کارکرد')
-    overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0, verbose_name='ساعات اضافه‌کاری')
-    other_additions = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='سایر مزایا')
-    other_deductions = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='سایر کسورات (مساعده و…)')
+    overtime_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0, validators=[MinValueValidator(0)], verbose_name='ساعات اضافه‌کاری')
+    other_additions = models.DecimalField(max_digits=18, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='سایر مزایا')
+    other_deductions = models.DecimalField(max_digits=18, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='سایر کسورات (مساعده و…)')
     # computed components
     base_pay = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حقوق پایه دوره')
     housing = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='حق مسکن')

@@ -41,3 +41,21 @@ def user_businesses(user):
     if user is not None and getattr(user, 'is_superuser', False):
         return qs
     return qs.filter(memberships__user=user).distinct()
+
+
+def legacy_scope_q(user):
+    """Q object for header-less (legacy) listings.
+
+    Without an explicit business context, a non-superuser may see
+    unscoped pre-ERP records (business IS NULL) plus the records of
+    businesses they belong to — never another business's records.
+    Superusers see everything, as before.
+    """
+    from django.db.models import Q
+
+    from .models import BusinessMembership
+
+    if user is not None and getattr(user, 'is_superuser', False):
+        return Q()
+    member_ids = BusinessMembership.objects.filter(user=user).values('business_id')
+    return Q(business__isnull=True) | Q(business_id__in=member_ids)

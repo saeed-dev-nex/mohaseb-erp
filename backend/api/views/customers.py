@@ -35,7 +35,7 @@ from ..serializers import (
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
-from ..business_context import resolve_business
+from ..business_context import legacy_scope_q, resolve_business
 from ..audit import snapshot, record_audit, is_invoice_content_version
 from ..pagination import OptionalPageNumberPagination
 
@@ -71,9 +71,13 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 Q(national_id__icontains=search)
             )
         # ERP: when the caller selected a business, scope the list to it.
+        # Without a selection, non-superusers still only see unscoped
+        # records plus their own businesses' — never another business's.
         business = resolve_business(self.request)
         if business is not None:
             qs = qs.filter(business=business)
+        else:
+            qs = qs.filter(legacy_scope_q(self.request.user))
         return qs
 
     def perform_create(self, serializer):

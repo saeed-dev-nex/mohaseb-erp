@@ -67,6 +67,14 @@ Desktop.ini
 backend/.secret_key
 *.backup.lock
 
+# Runtime output of the in-app updater (apply_update.ps1) — leaving it
+# untracked would trip the updater's own clean-tree guard forever.
+logs/
+# Crash-leftover temp siblings of the DB-wizard config files
+# (db_migration writes <name>.tmp then replaces).
+backend/.db_config.json.tmp
+backend/.db_migration_pending.json.tmp
+
 # Playwright E2E scratch data
 frontend/e2e/.tmp/
 frontend/test-results/

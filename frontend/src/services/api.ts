@@ -42,8 +42,13 @@ api.interceptors.request.use((config) => {
   const token = Cookies.get("access_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   try {
-    const businessId = window.localStorage.getItem(BUSINESS_STORAGE_KEY);
-    if (businessId) config.headers["X-Business-Id"] = businessId;
+    // An explicitly-set business header wins: queued offline invoices
+    // flush under the business they were drafted in, not whichever
+    // business happens to be selected when the flush runs.
+    if (!config.headers["X-Business-Id"]) {
+      const businessId = window.localStorage.getItem(BUSINESS_STORAGE_KEY);
+      if (businessId) config.headers["X-Business-Id"] = businessId;
+    }
   } catch {
     /* Storage may be unavailable; the request just stays unscoped. */
   }
@@ -53,6 +58,20 @@ api.interceptors.request.use((config) => {
 // Response interceptor - handle 401 with refresh.
 // The refresh token lives in an httpOnly cookie set by the backend, so the
 // refresh call is credentialed and sends no token from JavaScript storage.
+const clearSessionAndRedirect = () => {
+  Cookies.remove("access_token");
+  Cookies.remove("refresh_token");
+  localStorage.removeItem("mohaseb_user");
+  queryClient.clear();
+  // Redirecting while already on a public page would reload it
+  // and re-fire the failing request — an infinite loop that
+  // also burns the token-refresh throttle.
+  const path = window.location.pathname;
+  if (path !== "/login" && path !== "/setup") {
+    window.location.href = "/login";
+  }
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error: any) => {
@@ -66,22 +85,32 @@ api.interceptors.response.use(
       !error.config?._retriedAfterRefresh
     ) {
       error.config._retriedAfterRefresh = true;
+      let access: string;
       try {
-        const access = await refreshAccess(failedAccess);
-        error.config.headers.Authorization = `Bearer ${access}`;
-        return api.request(error.config);
-      } catch {
-        Cookies.remove("access_token");
-        Cookies.remove("refresh_token");
-        localStorage.removeItem("mohaseb_user");
-        queryClient.clear();
-        // Redirecting while already on a public page would reload it
-        // and re-fire the failing request — an infinite loop that
-        // also burns the token-refresh throttle.
-        const path = window.location.pathname;
-        if (path !== "/login" && path !== "/setup") {
-          window.location.href = "/login";
+        access = await refreshAccess(failedAccess);
+      } catch (refreshError: any) {
+        // Only a definitive refusal (400/401) means the session is
+        // dead. A network error or a 5xx — the backend restarts
+        // routinely for updates and DB switches — must NOT log the
+        // user out: the httpOnly refresh cookie is still valid and
+        // the next attempt may well succeed.
+        const refreshStatus = refreshError?.response?.status;
+        if (refreshStatus === 400 || refreshStatus === 401) {
+          clearSessionAndRedirect();
         }
+        return Promise.reject(error);
+      }
+      error.config.headers.Authorization = `Bearer ${access}`;
+      try {
+        return await api.request(error.config);
+      } catch (retryError: any) {
+        // Even the freshly-issued token was rejected: the session is
+        // unrecoverable, so tear it down instead of leaving a zombie
+        // "logged in" shell whose every call fails.
+        if (retryError?.response?.status === 401) {
+          clearSessionAndRedirect();
+        }
+        return Promise.reject(retryError);
       }
     }
     return Promise.reject(error);
@@ -150,7 +179,8 @@ export const invoicesAPI = {
     api.get("invoices/export_excel/", { params, responseType: "blob" }),
   exportCsv: (params: Params = {}) =>
     api.get("invoices/export_csv/", { params, responseType: "blob" }),
-  quickCreate: (data: Payload) => api.post("invoices/quick_create/", data),
+  quickCreate: (data: Payload, config?: Record<string, unknown>) =>
+    api.post("invoices/quick_create/", data, config),
   requestEdit: (id: Id) => api.post(`invoices/${id}/request-edit/`),
   editRequests: () => api.get("invoices/edit-requests/"),
   reviewEditRequest: (invoiceId: Id, requestId: Id, decision: string) =>

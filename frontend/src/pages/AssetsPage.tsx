@@ -151,7 +151,13 @@ export default function AssetsPage() {
         دارایی‌های ثابت — {current.name}
       </h1>
       {message && (
-        <p className="text-sm text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
+        <p
+          className={`text-sm rounded-xl px-3 py-2 border ${
+            message.startsWith("خطا")
+              ? "text-rose-300 bg-rose-500/10 border-rose-500/20"
+              : "text-emerald-300 bg-emerald-500/10 border-emerald-500/20"
+          }`}
+        >
           {message}
         </p>
       )}

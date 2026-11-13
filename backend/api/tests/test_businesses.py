@@ -127,9 +127,13 @@ class BusinessScopingTests(TestCase):
         self.client.force_authenticate(other)
         response = self.client.get('/api/invoices/', HTTP_X_BUSINESS_ID=str(self.b1.id))
         rows = response.data['results'] if isinstance(response.data, dict) else response.data
-        # Header ignored for a non-member: the full (unscoped) list comes back
-        # rather than the business's data being confirmed/filtered by it.
-        self.assertEqual(len(rows), 3)
+        # Header ignored for a non-member — and since the 2026-11-13
+        # review fix, a header-less listing no longer falls back to
+        # "everything": a non-superuser sees only unscoped records
+        # plus their own businesses'. The outsider belongs nowhere,
+        # so only the unassigned invoice remains.
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(rows[0]['business'])
 
 
 class TemplateDepthTests(TestCase):

@@ -63,6 +63,20 @@ class ApiConfig(AppConfig):
         from .db_migration import perform_pending_migration
 
         perform_pending_migration()
+        # Make the effective database visible in every run log: a stray
+        # DATABASE_URL in the environment silently outranks the app's
+        # own configuration, and the first symptom otherwise is missing
+        # data with no explanation anywhere.
+        try:
+            from .db_migration import current_status
+
+            _db_status = current_status()
+            print(
+                f"Database: {_db_status['engine']} (source: {_db_status['source']})",
+                flush=True,
+            )
+        except Exception:
+            pass
         from .scheduler import start_backup_scheduler
 
         start_backup_scheduler()
