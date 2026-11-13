@@ -62,6 +62,7 @@ const clearSessionAndRedirect = () => {
   Cookies.remove("access_token");
   Cookies.remove("refresh_token");
   localStorage.removeItem("mohaseb_user");
+  localStorage.removeItem(BUSINESS_STORAGE_KEY);
   queryClient.clear();
   // Redirecting while already on a public page would reload it
   // and re-fire the failing request — an infinite loop that

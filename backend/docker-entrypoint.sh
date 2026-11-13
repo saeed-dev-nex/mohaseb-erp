@@ -1,9 +1,20 @@
 #!/bin/sh
-# Prepare the database, then serve the ASGI app (HTTP + chat WebSocket).
+# Container entrypoint: fix data-volume ownership, then drop root.
+#
+# The image ships an unprivileged "appuser"; the app itself (migrate +
+# Daphne) always runs as that user. The entrypoint starts as root only
+# long enough to chown the data volume — volumes created by older
+# root-run installs would otherwise be unwritable after the switch —
+# and then re-executes the serve script as appuser.
 set -e
 
-python manage.py migrate --noinput
-# No administrator is created automatically: on first launch the web
-# setup wizard creates the superuser and configures the database.
+if [ "$(id -u)" = "0" ]; then
+    mkdir -p /data/media
+    chown -R appuser:appuser /data
+    # The app writes a few runtime files next to the code (.secret_key,
+    # .db_config.json, logs/): the directory itself must be writable.
+    chown appuser:appuser /app
+    exec su appuser -s /bin/sh -c 'exec /app/serve.sh'
+fi
 
-exec daphne -b 0.0.0.0 -p 8000 core.asgi:application
+exec /app/serve.sh
