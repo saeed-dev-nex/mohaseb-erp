@@ -31,8 +31,8 @@ from .tax import (
     SeasonalReportView, TaxSettingsView, VatReportView,
 )
 from .setup import (
-    SetupConfigureDatabaseView, SetupCreateAdminView, SetupStatusView,
-    SetupTestDatabaseView,
+    SetupConfigureDatabaseView, SetupCreateAdminView,
+    SetupProvisionDatabaseView, SetupStatusView, SetupTestDatabaseView,
 )
 from .accounting import (
     AccountLedgerView, AccountViewSet, ChartSeedView, JournalEntryViewSet,
@@ -64,7 +64,7 @@ __all__ = [
     'TaxSettingsView', 'VatReportView', 'SeasonalReportView',
     'MoadianSubmissionViewSet', 'FixedAssetViewSet', 'DepreciationRunViewSet',
     'SetupStatusView', 'SetupTestDatabaseView', 'SetupConfigureDatabaseView',
-    'SetupCreateAdminView',
+    'SetupProvisionDatabaseView', 'SetupCreateAdminView',
     'CaptchaView', 'ChangePasswordView', 'CheckRegistrationCodeView',
     'ForgotPasswordView', 'LoginOtpRequestView', 'LoginOtpVerifyView',
     'RegistrationCodeViewSet', 'RegisterView', 'ResetPasswordView',

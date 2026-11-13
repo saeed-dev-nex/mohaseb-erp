@@ -93,6 +93,41 @@ class SetupConfigureDatabaseView(APIView):
         return Response({'started': True, 'counts': counts, 'restart_required': True})
 
 
+class SetupProvisionDatabaseView(APIView):
+    """Create the PostgreSQL database + dedicated user, then stage.
+
+    The server-admin credential is used once, in memory, to create a
+    least-privilege role and its database (see db_migration); the app
+    itself never runs with it. Same hard gate as the rest of setup.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'setup'
+
+    def post(self, request):
+        if not _needs_setup():
+            return _closed()
+        status = db_migration.current_status()
+        if status['source'] == 'env':
+            return Response(
+                {'detail': 'پایگاه داده با متغیر محیطی DATABASE_URL مدیریت می‌شود و از داخل برنامه قابل تغییر نیست.'},
+                status=400,
+            )
+        if status['engine'] == 'postgresql':
+            return Response(
+                {'detail': 'برنامه در حال حاضر روی PostgreSQL اجرا می‌شود.'},
+                status=400,
+            )
+        try:
+            admin_params = db_migration.clean_admin_params(request.data)
+            counts = db_migration.provision_and_stage(admin_params)
+        except ValueError as error:
+            return Response({'detail': str(error)}, status=400)
+        return Response({'started': True, 'counts': counts, 'restart_required': True})
+
+
 class SetupCreateAdminView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []

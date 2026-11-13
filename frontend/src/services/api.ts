@@ -769,6 +769,11 @@ export const setupAPI = {
       "setup/status/",
     ),
   testDatabase: (data: Payload) => api.post("setup/test-database/", data),
+  provisionDatabase: (data: Payload) =>
+    api.post<{ started: boolean; restart_required: boolean }>(
+      "setup/provision-database/",
+      data,
+    ),
   configureDatabase: (data: Payload) =>
     api.post<{ started: boolean; restart_required: boolean }>(
       "setup/configure-database/",

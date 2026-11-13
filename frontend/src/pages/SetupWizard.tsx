@@ -22,6 +22,15 @@ export default function SetupWizard() {
     user: "postgres",
     password: "",
   });
+  const [pgMode, setPgMode] = useState<"auto" | "manual">("auto");
+  const [auto, setAuto] = useState({
+    host: "localhost",
+    port: 5432,
+    admin_user: "postgres",
+    admin_password: "",
+    name: "mohaseb_erp",
+    user: "mohaseb_erp",
+  });
   const [admin, setAdmin] = useState({
     username: "",
     first_name: "",
@@ -82,6 +91,19 @@ export default function SetupWizard() {
       if (res.data.restart_required) setStep("restart");
     } catch (err) {
       setError(detailOf(err, "تنظیم دیتابیس انجام نشد."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const provisionPg = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const res = await setupAPI.provisionDatabase(auto);
+      if (res.data.restart_required) setStep("restart");
+    } catch (err) {
+      setError(detailOf(err, "ساخت دیتابیس انجام نشد."));
     } finally {
       setBusy(false);
     }
@@ -168,64 +190,171 @@ export default function SetupWizard() {
                 PostgreSQL (پیشنهاد برای چند کاربر همزمان)
               </span>
               <div className="grid grid-cols-2 gap-2">
-                <input
-                  className={inp}
-                  placeholder="هاست"
-                  value={pg.host}
-                  onChange={(e) => setPg({ ...pg, host: e.target.value })}
-                />
-                <input
-                  className={inp}
-                  placeholder="پورت"
-                  type="number"
-                  value={pg.port}
-                  onChange={(e) =>
-                    setPg({ ...pg, port: Number(e.target.value) || 5432 })
-                  }
-                />
-                <input
-                  className={inp}
-                  placeholder="نام دیتابیس (خالیِ ساخته‌شده در pgAdmin)"
-                  value={pg.name}
-                  onChange={(e) => setPg({ ...pg, name: e.target.value })}
-                />
-                <input
-                  className={inp}
-                  placeholder="نام کاربری"
-                  value={pg.user}
-                  onChange={(e) => setPg({ ...pg, user: e.target.value })}
-                />
-                <input
-                  className={`${inp} col-span-2`}
-                  placeholder="رمز عبور PostgreSQL"
-                  type="password"
-                  value={pg.password}
-                  onChange={(e) => setPg({ ...pg, password: e.target.value })}
-                />
-              </div>
-              <div className="flex gap-2 pt-1">
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={testPg}
-                  className="px-4 py-2 rounded-xl bg-slate-600 hover:bg-slate-500 text-white text-sm disabled:opacity-50"
+                  onClick={() => setPgMode("auto")}
+                  className={`px-3 py-2 rounded-xl text-sm border transition-all ${
+                    pgMode === "auto"
+                      ? "bg-blue-600/20 border-blue-500/50 text-white"
+                      : "bg-slate-700/30 border-slate-600/50 text-slate-300 hover:bg-slate-700/60"
+                  }`}
                 >
-                  تست اتصال
+                  ساخت خودکار دیتابیس
                 </button>
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={configurePg}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
+                  onClick={() => setPgMode("manual")}
+                  className={`px-3 py-2 rounded-xl text-sm border transition-all ${
+                    pgMode === "manual"
+                      ? "bg-blue-600/20 border-blue-500/50 text-white"
+                      : "bg-slate-700/30 border-slate-600/50 text-slate-300 hover:bg-slate-700/60"
+                  }`}
                 >
-                  ذخیره و ادامه
+                  دیتابیس آماده دارم
                 </button>
               </div>
-              <p className="text-xs text-slate-500">
-                دیتابیس باید از قبل در pgAdmin ساخته و خالی باشد. پس از ذخیره،
-                برنامه یک بار بسته و دوباره اجرا می‌شود و ویزارد برای ساخت حساب
-                مدیر برمی‌گردد.
-              </p>
+              {pgMode === "auto" && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      className={inp}
+                      placeholder="هاست"
+                      value={auto.host}
+                      onChange={(e) =>
+                        setAuto({ ...auto, host: e.target.value })
+                      }
+                    />
+                    <input
+                      className={inp}
+                      placeholder="پورت"
+                      type="number"
+                      value={auto.port}
+                      onChange={(e) =>
+                        setAuto({
+                          ...auto,
+                          port: Number(e.target.value) || 5432,
+                        })
+                      }
+                    />
+                    <input
+                      className={inp}
+                      placeholder="کاربر مدیر سرور (معمولاً postgres)"
+                      value={auto.admin_user}
+                      onChange={(e) =>
+                        setAuto({ ...auto, admin_user: e.target.value })
+                      }
+                    />
+                    <input
+                      className={inp}
+                      placeholder="رمز مدیر سرور PostgreSQL"
+                      type="password"
+                      value={auto.admin_password}
+                      onChange={(e) =>
+                        setAuto({ ...auto, admin_password: e.target.value })
+                      }
+                    />
+                    <input
+                      className={inp}
+                      placeholder="نام دیتابیس جدید (لاتین)"
+                      value={auto.name}
+                      onChange={(e) =>
+                        setAuto({ ...auto, name: e.target.value })
+                      }
+                    />
+                    <input
+                      className={inp}
+                      placeholder="نام کاربر جدید دیتابیس (لاتین)"
+                      value={auto.user}
+                      onChange={(e) =>
+                        setAuto({ ...auto, user: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={provisionPg}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
+                    >
+                      ساخت دیتابیس و ادامه
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    رمز مدیر سرور فقط یک بار برای ساخت دیتابیس و کاربر استفاده
+                    می‌شود و هیچ‌جا ذخیره نمی‌شود. برنامه پس از آن با یک کاربر
+                    اختصاصی با کمترین دسترسی کار می‌کند که رمزش به‌صورت خودکار
+                    ساخته و رمزنگاری‌شده نگه داشته می‌شود؛ نیازی به pgAdmin
+                    نیست. پس از ذخیره، برنامه یک بار بسته و دوباره اجرا می‌شود و
+                    ویزارد برای ساخت حساب مدیر برمی‌گردد.
+                  </p>
+                </>
+              )}
+              {pgMode === "manual" && (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      className={inp}
+                      placeholder="هاست"
+                      value={pg.host}
+                      onChange={(e) => setPg({ ...pg, host: e.target.value })}
+                    />
+                    <input
+                      className={inp}
+                      placeholder="پورت"
+                      type="number"
+                      value={pg.port}
+                      onChange={(e) =>
+                        setPg({ ...pg, port: Number(e.target.value) || 5432 })
+                      }
+                    />
+                    <input
+                      className={inp}
+                      placeholder="نام دیتابیس (خالیِ ساخته‌شده در pgAdmin)"
+                      value={pg.name}
+                      onChange={(e) => setPg({ ...pg, name: e.target.value })}
+                    />
+                    <input
+                      className={inp}
+                      placeholder="نام کاربری"
+                      value={pg.user}
+                      onChange={(e) => setPg({ ...pg, user: e.target.value })}
+                    />
+                    <input
+                      className={`${inp} col-span-2`}
+                      placeholder="رمز عبور PostgreSQL"
+                      type="password"
+                      value={pg.password}
+                      onChange={(e) =>
+                        setPg({ ...pg, password: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={testPg}
+                      className="px-4 py-2 rounded-xl bg-slate-600 hover:bg-slate-500 text-white text-sm disabled:opacity-50"
+                    >
+                      تست اتصال
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={configurePg}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
+                    >
+                      ذخیره و ادامه
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    دیتابیس باید از قبل در pgAdmin ساخته و خالی باشد. پس از
+                    ذخیره، برنامه یک بار بسته و دوباره اجرا می‌شود و ویزارد برای
+                    ساخت حساب مدیر برمی‌گردد.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
