@@ -7,6 +7,7 @@ import { queryClient } from "../lib/queryClient";
 import { BUSINESS_STORAGE_KEY } from "../services/api";
 import { hasModule } from "../utils/modules";
 import type { ModuleName } from "../utils/modules";
+import { useBusiness } from "../lib/business";
 
 type NavItem = {
   to: string;
@@ -108,6 +109,7 @@ const Sidebar = ({
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentUser = useSelector((s: any) => s.auth.currentUser);
+  const { current: currentBusiness } = useBusiness();
   const isAdmin = currentUser?.is_superuser;
   const isManager = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
   const [editRequestCount, setEditRequestCount] = useState(0);
@@ -181,10 +183,34 @@ const Sidebar = ({
 
   // Stage 6: hide nav items for modules the user cannot access
   // (the backend enforces the same rules on the API itself).
+  // ERP: a section also has to belong to the CURRENT business's job
+  // template — a beauty salon has no warehouse, a gas station has no
+  // chat — so user access and the business's effective modules are
+  // intersected. With no business selected the user-level rule alone
+  // applies (the pages themselves ask for a selection).
+  const businessModules = currentBusiness?.effective_modules ?? null;
+  const terminology = currentBusiness?.terminology ?? null;
   const navGroups = [...BASE_NAV_GROUPS, systemGroup]
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => hasModule(currentUser, item.module)),
+      items: group.items
+        .filter((item) => hasModule(currentUser, item.module))
+        .filter(
+          (item) =>
+            !item.module ||
+            !businessModules ||
+            businessModules.includes(item.module),
+        )
+        .map((item) => {
+          // Speak the trade's words where the template defines them.
+          if (item.to === "/invoices/new" && terminology?.invoice) {
+            return { ...item, label: `${terminology.invoice} جدید` };
+          }
+          if (item.to === "/services" && terminology?.item) {
+            return { ...item, label: terminology.item };
+          }
+          return item;
+        }),
     }))
     .filter((group) => group.items.length > 0);
 

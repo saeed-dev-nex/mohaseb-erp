@@ -1317,7 +1317,9 @@ const InvoiceForm = () => {
               ← بازگشت
             </button>
             <h2 className="text-2xl font-bold text-white">
-              {isEdit ? `ویرایش فاکتور` : "صدور فاکتور جدید"}
+              {isEdit
+                ? `ویرایش ${currentBusiness?.terminology?.invoice ?? "فاکتور"}`
+                : `صدور ${currentBusiness?.terminology?.invoice ?? "فاکتور"} جدید`}
             </h2>
           </div>
           <div className="flex gap-3">

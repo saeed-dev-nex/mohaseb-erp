@@ -7,7 +7,7 @@ import { formatApiError } from "../utils/apiError";
 /** First-business setup for self-registered customers. */
 const CreateBusiness = () => {
   const navigate = useNavigate();
-  const { refresh } = useBusiness();
+  const { refresh, switchTo } = useBusiness();
   const [templates, setTemplates] = useState<BusinessTemplate[]>([]);
   const [name, setName] = useState("");
   const [templateKey, setTemplateKey] = useState("");
@@ -32,12 +32,15 @@ const CreateBusiness = () => {
     setLoading(true);
     setError("");
     try {
-      await businessesAPI.create({
+      const { data: created } = await businessesAPI.create({
         name: name.trim(),
         template_key: templateKey,
         person_type: personType,
       });
       await refresh();
+      // Work in the business that was just created, not whichever one
+      // happened to be selected (or first) before.
+      switchTo(created.id);
       navigate("/");
     } catch (err) {
       setError(formatApiError(err, "ساخت کسب‌وکار ناموفق بود."));

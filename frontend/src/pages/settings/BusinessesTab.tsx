@@ -6,6 +6,7 @@ import {
   type FiscalYear,
 } from "../../services/api";
 import { showWaiting, hideWaiting } from "../../lib/waiting";
+import { useBusiness } from "../../lib/business";
 import { F, Section, inp } from "./shared";
 
 const faNum = (value: number) => value.toLocaleString("fa-IR");
@@ -30,6 +31,7 @@ type Member = {
  * (قالب شغلی), and manages each business's fiscal years and members.
  */
 export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
+  const { refresh: refreshProvider, switchTo } = useBusiness();
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [templates, setTemplates] = useState<BusinessTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -77,6 +79,50 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
 
   const selected = businesses.find((b) => b.id === selectedId) ?? null;
 
+  const [identityForm, setIdentityForm] = useState({
+    name: "",
+    person_type: "legal" as "legal" | "individual",
+    legal_name: "",
+    national_id: "",
+    economic_code: "",
+    registration_number: "",
+    phone: "",
+    address: "",
+  });
+
+  useEffect(() => {
+    const business = businesses.find((b) => b.id === selectedId);
+    if (!business) return;
+    setIdentityForm({
+      name: business.name,
+      person_type: business.person_type,
+      legal_name: business.legal_name ?? "",
+      national_id: business.national_id ?? "",
+      economic_code: business.economic_code ?? "",
+      registration_number: business.registration_number ?? "",
+      phone: business.phone ?? "",
+      address: business.address ?? "",
+    });
+    // Re-sync only when a different business is picked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  const saveIdentity = async () => {
+    if (!selected) return;
+    setError("");
+    setNotice("");
+    try {
+      const { data } = await businessesAPI.update(selected.id, identityForm);
+      setBusinesses((previous) =>
+        previous.map((b) => (b.id === data.id ? data : b)),
+      );
+      await refreshProvider();
+      setNotice(`مشخصات «${data.name}» ذخیره شد.`);
+    } catch {
+      setError("ذخیرهٔ مشخصات کسب‌وکار انجام نشد؛ فیلدها را بررسی کنید.");
+    }
+  };
+
   useEffect(() => {
     if (!selected) {
       setYears([]);
@@ -110,6 +156,11 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
       });
       await loadBusinesses();
       setSelectedId(data.id);
+      // Make the new business the app's current one, so the ERP
+      // sections (accounting, inventory, …) open on it immediately
+      // instead of staying on "no business selected".
+      await refreshProvider();
+      switchTo(data.id);
       setNotice(
         `کسب‌وکار «${data.name}» با قالب «${data.template_title}» ساخته شد و سال مالی جاری آن آماده است.`,
       );
@@ -312,6 +363,116 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
 
       {selected && (
         <>
+          <Section title={`مشخصات کسب‌وکار — ${selected.name}`} icon="🪪">
+            <p className="text-xs text-slate-400 mb-4">
+              این مشخصات مخصوص همین کسب‌وکار است و با جابه‌جایی بین کسب‌وکارها
+              عوض می‌شود؛ روی سربرگ فاکتور و گزارش‌های رسمی همین کسب‌وکار
+              می‌نشیند.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <F label="نام کسب‌وکار">
+                <input
+                  className={inp}
+                  value={identityForm.name}
+                  onChange={(e) =>
+                    setIdentityForm({ ...identityForm, name: e.target.value })
+                  }
+                />
+              </F>
+              <F label="نوع شخصیت">
+                <select
+                  className={inp}
+                  value={identityForm.person_type}
+                  onChange={(e) =>
+                    setIdentityForm({
+                      ...identityForm,
+                      person_type: e.target.value as "legal" | "individual",
+                    })
+                  }
+                >
+                  <option value="legal">حقوقی (شرکت / مؤسسه)</option>
+                  <option value="individual">حقیقی (شخص / مغازه)</option>
+                </select>
+              </F>
+              <F label="نام قانونی / نام کامل">
+                <input
+                  className={inp}
+                  value={identityForm.legal_name}
+                  onChange={(e) =>
+                    setIdentityForm({
+                      ...identityForm,
+                      legal_name: e.target.value,
+                    })
+                  }
+                />
+              </F>
+              <F label="شناسه ملی / کد ملی">
+                <input
+                  className={inp}
+                  value={identityForm.national_id}
+                  onChange={(e) =>
+                    setIdentityForm({
+                      ...identityForm,
+                      national_id: e.target.value,
+                    })
+                  }
+                />
+              </F>
+              <F label="کد اقتصادی">
+                <input
+                  className={inp}
+                  value={identityForm.economic_code}
+                  onChange={(e) =>
+                    setIdentityForm({
+                      ...identityForm,
+                      economic_code: e.target.value,
+                    })
+                  }
+                />
+              </F>
+              <F label="شماره ثبت">
+                <input
+                  className={inp}
+                  value={identityForm.registration_number}
+                  onChange={(e) =>
+                    setIdentityForm({
+                      ...identityForm,
+                      registration_number: e.target.value,
+                    })
+                  }
+                />
+              </F>
+              <F label="تلفن">
+                <input
+                  className={inp}
+                  value={identityForm.phone}
+                  onChange={(e) =>
+                    setIdentityForm({ ...identityForm, phone: e.target.value })
+                  }
+                />
+              </F>
+              <F label="نشانی">
+                <input
+                  className={inp}
+                  value={identityForm.address}
+                  onChange={(e) =>
+                    setIdentityForm({
+                      ...identityForm,
+                      address: e.target.value,
+                    })
+                  }
+                />
+              </F>
+            </div>
+            <button
+              onClick={saveIdentity}
+              disabled={!identityForm.name.trim()}
+              className="mt-4 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-sm font-medium rounded-xl transition-all"
+            >
+              ذخیرهٔ مشخصات
+            </button>
+          </Section>
+
           <Section
             title={`پروفایل فاکتور و کاتالوگ — ${selected.name}`}
             icon="🧾"

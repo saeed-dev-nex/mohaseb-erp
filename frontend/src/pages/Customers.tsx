@@ -18,6 +18,7 @@ import {
   ConfirmDialog,
 } from "../components/ui";
 import { toPersianKeyboard } from "../utils/persian";
+import { useBusiness } from "../lib/business";
 
 type CustomerRow = {
   id: number;
@@ -141,6 +142,11 @@ const CustomerForm = ({
 
 const Customers = () => {
   const queryClient = useQueryClient();
+  // Trades name their counterparty differently: a clinic has
+  // مراجعه‌کننده, a school هنرجو — the template carries the word.
+  const { current: currentBusiness } = useBusiness();
+  const customerLabel = currentBusiness?.terminology?.customer ?? "مشتری";
+  const customersTitle = customerLabel === "مشتری" ? "مشتریان" : customerLabel;
   const [search, setSearch] = useState("");
   const { data, isFetching } = useCustomers({ search });
   const list = (data ?? []) as CustomerRow[];
@@ -216,11 +222,13 @@ const Customers = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">👥 مشتریان</h2>
-          <p className="text-slate-400 text-sm mt-1">مدیریت اطلاعات مشتریان</p>
+          <h2 className="text-2xl font-bold text-white">👥 {customersTitle}</h2>
+          <p className="text-slate-400 text-sm mt-1">
+            مدیریت اطلاعات {customerLabel}
+          </p>
         </div>
         <Button variant="primary" onClick={openAdd}>
-          + افزودن مشتری
+          {`+ افزودن ${customerLabel}`}
         </Button>
       </div>
 
@@ -335,7 +343,11 @@ const Customers = () => {
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editTarget ? "ویرایش مشتری" : "افزودن مشتری جدید"}
+        title={
+          editTarget
+            ? `ویرایش ${customerLabel}`
+            : `افزودن ${customerLabel} جدید`
+        }
         size="lg"
       >
         <CustomerForm

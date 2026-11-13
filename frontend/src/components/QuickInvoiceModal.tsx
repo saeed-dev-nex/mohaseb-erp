@@ -19,6 +19,7 @@ import {
 import { MOTO_BRANDS } from "../lib/vehicle";
 import { enqueueQuickInvoice } from "../lib/offlineQueue";
 import { hideWaiting, showWaiting } from "../lib/waiting";
+import { useBusiness } from "../lib/business";
 
 const YEAR_OPTIONS = jalaliYearRange(1360, currentJalaliYear());
 
@@ -360,6 +361,16 @@ const QuickInvoiceModal = ({
   const [vehicleTypes, setVehicleTypes] = useState<
     { id: number; name: string }[]
   >([]);
+  // ERP: the quick form follows the current business's invoice
+  // profile, exactly like the full form — a shop or restaurant has no
+  // vehicle block, and trade extras (table number, liters/nozzle, …)
+  // are collected into custom_fields. With no business selected the
+  // legacy always-show behaviour is kept.
+  const { current: currentBusiness } = useBusiness();
+  const invoiceProfile = currentBusiness?.invoice_profile;
+  const showVehicle = invoiceProfile ? invoiceProfile.vehicle : true;
+  const profileExtras = invoiceProfile?.extras ?? [];
+  const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [creatingVehicleType, setCreatingVehicleType] = useState(false);
   const [commissionEntered, setCommissionEntered] = useState(false);
   const [notice, setNotice] = useState("");
@@ -408,6 +419,7 @@ const QuickInvoiceModal = ({
     setVehicleModel("");
     setVehicleType("");
     setVehicleYear("");
+    setCustomFields({});
   }, []);
 
   useEffect(() => {
@@ -672,6 +684,7 @@ const QuickInvoiceModal = ({
         vehicle_model: vehicleModel,
         vehicle_type: vehicleType,
         vehicle_year: vehicleYear,
+        custom_fields: customFields,
         items: items
           .filter((it) => it.service_title_snapshot || it.main_price)
           .map((it) => ({
@@ -928,8 +941,8 @@ const QuickInvoiceModal = ({
         {/* Steps */}
         <div className="flex items-center gap-1.5 px-5 pt-4 shrink-0 overflow-x-auto min-w-0 w-full">
           {[
-            { n: 1, l: "مشتری و خودرو" },
-            { n: 2, l: "خدمات" },
+            { n: 1, l: showVehicle ? "مشتری و خودرو" : "مشتری" },
+            { n: 2, l: currentBusiness?.terminology?.item ?? "خدمات" },
             { n: 3, l: "کارمزد و توضیحات" },
             { n: 4, l: "وضعیت و ثبت" },
           ].map((s, i) => (
@@ -1005,126 +1018,130 @@ const QuickInvoiceModal = ({
                 </div>
               </div>
 
-              {/* Vehicle — same fields & behavior as the full invoice form */}
-              <div className="bg-slate-700/20 border border-slate-700/50 rounded-xl p-3 space-y-3">
-                <label className="text-xs text-slate-400 font-medium block">
-                  {isMoto
-                    ? "🏍️ اطلاعات موتورسیکلت (اختیاری)"
-                    : "🚗 اطلاعات خودرو (اختیاری)"}
-                </label>
-                <div>
-                  <label className="text-[10px] text-slate-500 mb-1 block">
-                    شماره پلاک
+              {/* Vehicle — same fields & behavior as the full invoice
+                  form, but only for trades whose profile carries a
+                  vehicle block (repairs, carwash, …). */}
+              {showVehicle && (
+                <div className="bg-slate-700/20 border border-slate-700/50 rounded-xl p-3 space-y-3">
+                  <label className="text-xs text-slate-400 font-medium block">
+                    {isMoto
+                      ? "🏍️ اطلاعات موتورسیکلت (اختیاری)"
+                      : "🚗 اطلاعات خودرو (اختیاری)"}
                   </label>
-                  <PlateInput
-                    value={vehiclePlate}
-                    onChange={handlePlateChange}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] text-slate-500 mb-1 block">
-                      شماره شاسی (VIN)
+                      شماره پلاک
                     </label>
-                    <input
-                      className={inp}
-                      dir="ltr"
-                      maxLength={17}
-                      value={vehicleVin}
-                      onChange={(e) => setVehicleVin(e.target.value)}
-                      placeholder="17 کاراکتر"
+                    <PlateInput
+                      value={vehiclePlate}
+                      onChange={handlePlateChange}
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 mb-1 block">
-                      {isMoto ? "برند و مدل موتور" : "نوع خودرو"}
-                    </label>
-                    {isMoto ? (
-                      <SearchableSelect
-                        key="moto-type"
-                        value={vehicleType}
-                        onChange={(v) => setVehicleType(String(v))}
-                        options={MOTO_BRANDS}
-                        placeholder="— انتخاب یا افزودن برند/مدل —"
-                        searchPlaceholder="جستجو در موتورسیکلت‌ها..."
-                        emptyText="موتوری یافت نشد"
-                        creatable
-                        onCreateOption={handleCreateVehicleType}
-                        creating={creatingVehicleType}
-                        createLabel={(name) => (
-                          <>
-                            <span className="text-slate-400">افزودن: </span>
-                            <span className="font-medium">«{name}»</span>
-                            <span className="text-xs text-emerald-600 mr-2">
-                              (ذخیره خودکار)
-                            </span>
-                          </>
-                        )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] text-slate-500 mb-1 block">
+                        شماره شاسی (VIN)
+                      </label>
+                      <input
+                        className={inp}
+                        dir="ltr"
+                        maxLength={17}
+                        value={vehicleVin}
+                        onChange={(e) => setVehicleVin(e.target.value)}
+                        placeholder="17 کاراکتر"
                       />
-                    ) : (
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500 mb-1 block">
+                        {isMoto ? "برند و مدل موتور" : "نوع خودرو"}
+                      </label>
+                      {isMoto ? (
+                        <SearchableSelect
+                          key="moto-type"
+                          value={vehicleType}
+                          onChange={(v) => setVehicleType(String(v))}
+                          options={MOTO_BRANDS}
+                          placeholder="— انتخاب یا افزودن برند/مدل —"
+                          searchPlaceholder="جستجو در موتورسیکلت‌ها..."
+                          emptyText="موتوری یافت نشد"
+                          creatable
+                          onCreateOption={handleCreateVehicleType}
+                          creating={creatingVehicleType}
+                          createLabel={(name) => (
+                            <>
+                              <span className="text-slate-400">افزودن: </span>
+                              <span className="font-medium">«{name}»</span>
+                              <span className="text-xs text-emerald-600 mr-2">
+                                (ذخیره خودکار)
+                              </span>
+                            </>
+                          )}
+                        />
+                      ) : (
+                        <SearchableSelect
+                          key="car-type"
+                          value={vehicleType}
+                          onChange={(v) => setVehicleType(String(v))}
+                          options={vehicleTypes.map((vt) => ({
+                            value: vt.name,
+                            label: vt.name,
+                          }))}
+                          placeholder="— انتخاب یا افزودن نوع —"
+                          searchPlaceholder="جستجو یا افزودن نوع خودرو..."
+                          creatable
+                          onCreateOption={handleCreateVehicleType}
+                          creating={creatingVehicleType}
+                          createLabel={(name) => (
+                            <>
+                              <span className="text-slate-400">
+                                افزودن نوع جدید:{" "}
+                              </span>
+                              <span className="font-medium">«{name}»</span>
+                              <span className="text-xs text-emerald-600 mr-2">
+                                (ذخیره خودکار)
+                              </span>
+                            </>
+                          )}
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500 mb-1 block">
+                        {isMoto ? "اطلاعات تکمیلی موتور" : "نام / مدل خودرو"}
+                      </label>
+                      <input
+                        className={inp}
+                        value={vehicleModel}
+                        onChange={(e) =>
+                          setVehicleModel(toPersianKeyboard(e.target.value))
+                        }
+                        placeholder={
+                          isMoto
+                            ? "مثال: رنگ، سال، موتور ویژه"
+                            : "مثال: پراید، سمند، پژو ۲۰۶"
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-500 mb-1 block">
+                        سال ساخت (شمسی)
+                      </label>
                       <SearchableSelect
-                        key="car-type"
-                        value={vehicleType}
-                        onChange={(v) => setVehicleType(String(v))}
-                        options={vehicleTypes.map((vt) => ({
-                          value: vt.name,
-                          label: vt.name,
+                        value={vehicleYear || ""}
+                        onChange={(v) => setVehicleYear(String(v))}
+                        options={YEAR_OPTIONS.map((y) => ({
+                          value: String(y),
+                          label: String(y),
                         }))}
-                        placeholder="— انتخاب یا افزودن نوع —"
-                        searchPlaceholder="جستجو یا افزودن نوع خودرو..."
-                        creatable
-                        onCreateOption={handleCreateVehicleType}
-                        creating={creatingVehicleType}
-                        createLabel={(name) => (
-                          <>
-                            <span className="text-slate-400">
-                              افزودن نوع جدید:{" "}
-                            </span>
-                            <span className="font-medium">«{name}»</span>
-                            <span className="text-xs text-emerald-600 mr-2">
-                              (ذخیره خودکار)
-                            </span>
-                          </>
-                        )}
+                        placeholder="— انتخاب سال —"
+                        searchPlaceholder="جستجوی سال..."
                       />
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 mb-1 block">
-                      {isMoto ? "اطلاعات تکمیلی موتور" : "نام / مدل خودرو"}
-                    </label>
-                    <input
-                      className={inp}
-                      value={vehicleModel}
-                      onChange={(e) =>
-                        setVehicleModel(toPersianKeyboard(e.target.value))
-                      }
-                      placeholder={
-                        isMoto
-                          ? "مثال: رنگ، سال، موتور ویژه"
-                          : "مثال: پراید، سمند، پژو ۲۰۶"
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-500 mb-1 block">
-                      سال ساخت (شمسی)
-                    </label>
-                    <SearchableSelect
-                      value={vehicleYear || ""}
-                      onChange={(v) => setVehicleYear(String(v))}
-                      options={YEAR_OPTIONS.map((y) => ({
-                        value: String(y),
-                        label: String(y),
-                      }))}
-                      placeholder="— انتخاب سال —"
-                      searchPlaceholder="جستجوی سال..."
-                    />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {plateSuggestion && (
+              {showVehicle && plateSuggestion && (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-3 text-sm text-teal-200">
                   <span>
                     🔁 برای این پلاک، فاکتور {plateSuggestion.invoice_number}{" "}
@@ -1149,6 +1166,56 @@ const QuickInvoiceModal = ({
                   </button>
                 </div>
               )}
+
+              {/* Trade extras from the business's invoice profile
+                  (table number, liters/nozzle, stylist, …) */}
+              {profileExtras.length > 0 && (
+                <div className="bg-slate-700/20 border border-slate-700/50 rounded-xl p-3 space-y-3">
+                  <label className="text-xs text-slate-400 font-medium block">
+                    🧩 اطلاعات تکمیلی فاکتور
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {profileExtras.map((extra) => (
+                      <div key={extra.key}>
+                        <label className="text-[10px] text-slate-500 mb-1 block">
+                          {extra.label}
+                        </label>
+                        {extra.type === "select" ? (
+                          <select
+                            className={inp}
+                            value={customFields[extra.key] || ""}
+                            onChange={(e) =>
+                              setCustomFields((fields) => ({
+                                ...fields,
+                                [extra.key]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">—</option>
+                            {(extra.options || []).map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={extra.type === "number" ? "number" : "text"}
+                            className={inp}
+                            value={customFields[extra.key] || ""}
+                            onChange={(e) =>
+                              setCustomFields((fields) => ({
+                                ...fields,
+                                [extra.key]: e.target.value,
+                              }))
+                            }
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -1158,7 +1225,7 @@ const QuickInvoiceModal = ({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs text-slate-400 font-medium">
-                    🔧 خدمات
+                    🔧 {currentBusiness?.terminology?.item ?? "خدمات"}
                   </label>
                   <button
                     type="button"

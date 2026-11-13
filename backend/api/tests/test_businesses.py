@@ -110,6 +110,12 @@ class BusinessScopingTests(TestCase):
         self.assertEqual([row['name'] for row in rows], ['مشتری دو'])
 
     def test_create_invoice_assigns_current_business(self):
+        # A real business always carries a fiscal year (the API create
+        # path seeds one); service invoices post a revenue journal, so
+        # this ORM-built business needs the same seed to post into.
+        from ..services.business_setup import create_default_fiscal_year
+
+        create_default_fiscal_year(self.b1)
         response = self.client.post(
             '/api/invoices/',
             {
