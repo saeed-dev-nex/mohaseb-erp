@@ -175,9 +175,13 @@ CORS_ALLOW_CREDENTIALS = True
 # the refresh token out of response bodies (see api.auth_views). Browsers
 # preflight that custom header, so it must be CORS-allowed or cross-origin
 # login (the standard frontend-port -> API-port setup) is blocked entirely.
+# The ERP's business scoping rides on X-Business-Id the same way: the
+# interceptor attaches it to every request once a business is selected,
+# so it needs the same allowance — without it, split-port setups lose
+# the ENTIRE API to preflight failures the moment a business exists.
 from corsheaders.defaults import default_headers as _cors_default_headers
 
-CORS_ALLOW_HEADERS = list(_cors_default_headers) + ['x-client-type']
+CORS_ALLOW_HEADERS = list(_cors_default_headers) + ['x-client-type', 'x-business-id']
 
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
