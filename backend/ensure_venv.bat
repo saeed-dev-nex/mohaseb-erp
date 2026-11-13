@@ -83,7 +83,7 @@ call :write_requirements_stamp
 exit /b 0
 
 :check_dependencies
-"%BACKEND_PYTHON%" -c "import django, rest_framework, rest_framework_simplejwt, corsheaders, cryptography, openpyxl, whitenoise, boto3, botocore, dj_database_url, psycopg, channels_redis, redis; from PIL import Image; assert django.VERSION >= (4, 2)" >nul 2>&1
+"%BACKEND_PYTHON%" -c "import django, rest_framework, rest_framework_simplejwt, corsheaders, cryptography, openpyxl, whitenoise, boto3, botocore, dj_database_url, psycopg, channels, channels_redis, daphne, redis; from PIL import Image; assert django.VERSION >= (4, 2)" >nul 2>&1
 if errorlevel 1 exit /b 1
 "%BACKEND_PYTHON%" -m pip check >nul 2>&1
 exit /b %errorlevel%

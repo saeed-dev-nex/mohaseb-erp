@@ -20,7 +20,9 @@ from rest_framework.views import APIView
 from ..business_context import resolve_business
 from ..models import Account, FiscalYear, JournalEntry
 from ..serializers import AccountSerializer, JournalEntrySerializer
-from ..services.accounting import account_ledger, seed_standard_chart, trial_balance
+from ..services.accounting import (
+    account_ledger, retry_on_number_conflict, seed_standard_chart, trial_balance,
+)
 
 WRITE_ROLES = ('owner', 'manager')
 
@@ -74,7 +76,13 @@ class AccountViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         business = _require_business(self.request)
         _require_write(self.request, business)
-        serializer.save()
+        # Mirror create: the parent must belong to this business and the
+        # level is always derived from it, never taken from the payload.
+        parent = serializer.validated_data.get('parent', serializer.instance.parent)
+        if parent is not None and parent.business_id != business.id:
+            raise ValidationError({'parent': 'حساب والد متعلق به این کسب‌وکار نیست.'})
+        level = (parent.level + 1) if parent is not None else 1
+        serializer.save(level=level)
 
     def perform_destroy(self, instance):
         business = _require_business(self.request)
@@ -117,14 +125,18 @@ class JournalEntryViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self._check_date_in_year(serializer.validated_data.get('date'), fiscal_year)
-        last = (
-            JournalEntry.objects.filter(business=business, fiscal_year=fiscal_year)
-            .aggregate(value=Max('number'))['value'] or 0
-        )
-        entry = serializer.save(
-            business=business, fiscal_year=fiscal_year,
-            number=last + 1, created_by=request.user,
-        )
+
+        def _save():
+            last = (
+                JournalEntry.objects.filter(business=business, fiscal_year=fiscal_year)
+                .aggregate(value=Max('number'))['value'] or 0
+            )
+            return serializer.save(
+                business=business, fiscal_year=fiscal_year,
+                number=last + 1, created_by=request.user,
+            )
+
+        entry = retry_on_number_conflict(_save)
         return Response(
             self.get_serializer(entry).data, status=status.HTTP_201_CREATED,
         )

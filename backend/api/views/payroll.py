@@ -15,6 +15,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db import IntegrityError
 from django.http import HttpResponse
 
 from ..models import EmploymentProfile, PayrollPeriod, Payslip
@@ -84,6 +85,18 @@ class PayrollPeriodViewSet(viewsets.ModelViewSet):
         business = _require_business(self.request)
         _require_write(self.request, business)
         serializer.save(business=business, created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        _require_write(self.request, serializer.instance.business)
+        if serializer.instance.status == 'finalized':
+            raise ValidationError('دورهٔ نهایی‌شده قابل ویرایش نیست؛ ابتدا آن را به پیش‌نویس برگردانید.')
+        serializer.save()
+
+    def update(self, request, *args, **kwargs):
+        try:
+            return super().update(request, *args, **kwargs)
+        except IntegrityError:
+            raise ValidationError('برای این کسب‌وکار در آن سال و ماه دوره‌ای وجود دارد.')
 
     def perform_destroy(self, instance):
         _require_write(self.request, instance.business)

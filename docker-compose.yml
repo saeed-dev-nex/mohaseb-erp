@@ -3,7 +3,8 @@
 # Before the first run, create a `.env` file in this folder (see .env.example)
 # with at least a DJANGO_SECRET_KEY. The app is then available at
 # http://localhost:8080 and the API also directly at http://localhost:8000/api/
-# The first admin password is printed once in `docker compose logs backend`.
+# The first run opens a setup wizard in the browser: pick the database
+# (SQLite or PostgreSQL), then create the admin account there.
 
 services:
   backend:

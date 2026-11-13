@@ -47,11 +47,28 @@ const Login = () => {
           headers: { Authorization: `Bearer ${response.data.access}` },
         });
         dispatch(setCurrentUser(meRes.data));
-      } catch (_) {}
+      } catch (_) {
+        // Logged in but profile-less is a broken state (no modules, no
+        // navigation, no explanation) — say so and stay on the form.
+        setError(
+          "ورود انجام شد، اما دریافت مشخصات کاربر از سرور ناموفق بود. دوباره تلاش کنید.",
+        );
+        return;
+      }
 
       navigate("/");
-    } catch (err) {
-      setError("نام کاربری یا رمز عبور اشتباه است.");
+    } catch (err: any) {
+      if (!err?.response) {
+        setError(
+          "ارتباط با سرور برقرار نشد. از روشن بودن سرور مطمئن شوید و دوباره تلاش کنید.",
+        );
+      } else if (err.response.status === 429) {
+        setError(
+          "به‌دلیل تلاش‌های پی‌درپی، ورود موقتاً محدود شده است؛ یک دقیقه صبر کنید.",
+        );
+      } else {
+        setError("نام کاربری یا رمز عبور اشتباه است.");
+      }
     } finally {
       setLoading(false);
     }

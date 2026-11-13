@@ -261,6 +261,7 @@ const DonutChart = ({
 
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [paidError, setPaidError] = useState("");
   const [reminders, setReminders] = useState<DashboardReminders | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -281,9 +282,19 @@ const Dashboard = () => {
   }, []);
 
   const handleMarkPaid = async (id: number) => {
-    await invoicesAPI.markPaid(id);
-    const res = await dashboardAPI.stats();
-    setStats(res.data);
+    setPaidError("");
+    try {
+      await invoicesAPI.markPaid(id);
+    } catch {
+      setPaidError("خطا در ثبت پرداخت فاکتور؛ دوباره تلاش کنید.");
+      return;
+    }
+    try {
+      const res = await dashboardAPI.stats();
+      setStats(res.data);
+    } catch {
+      /* the payment landed; a stale dashboard is not an error */
+    }
   };
 
   if (loading) return <Spinner size="lg" />;
@@ -295,6 +306,11 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-6">
+      {paidError && (
+        <p className="text-sm text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">
+          {paidError}
+        </p>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -256,6 +256,27 @@ def perform_pending_migration(force=False):
     engine = settings.DATABASES['default'].get('ENGINE') or ''
     if not force and not engine.endswith('postgresql'):
         return
+    if not force:
+        # The payload belongs in the database the local config names.
+        # If the environment has since pointed the app at a DIFFERENT
+        # PostgreSQL (e.g. a DATABASE_URL leaked from another install),
+        # importing here would restore the data into the wrong database
+        # — refuse, keep the pending file, and say why.
+        config = read_local_config()
+        if config is not None:
+            target_name = str(config.get('name') or '')
+            active_name = str(settings.DATABASES['default'].get('NAME') or '')
+            if target_name and active_name != target_name:
+                logger.warning(
+                    'Pending migration targets database %r but the active '
+                    'database is %r; import skipped.',
+                    target_name, active_name,
+                )
+                _record_result(
+                    False, None,
+                    'پایگاه دادهٔ فعال با مقصد مهاجرت همخوان نیست؛ واردسازی انجام نشد.',
+                )
+                return
     try:
         pending = json.loads(pending_path().read_text(encoding='utf-8'))
         from .backup_utils import restore_backup

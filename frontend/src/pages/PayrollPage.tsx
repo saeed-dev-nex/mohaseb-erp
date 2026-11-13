@@ -146,7 +146,15 @@ export default function PayrollPage() {
       if (kind === "finalize") await payrollAPI.finalize(period.id);
       if (kind === "unfinalize") await payrollAPI.unfinalize(period.id);
       if (kind === "delete") await payrollAPI.deletePeriod(period.id);
-      setMessage("انجام شد.");
+    } catch {
+      setMessage("خطا در انجام عملیات روی دوره");
+      return;
+    }
+    setMessage("انجام شد.");
+    // The action already succeeded on the server; a failed refresh
+    // must not rebrand it as a failure (it invites a duplicate retry
+    // against, e.g., an already-finalized period).
+    try {
       if (kind === "delete" && selectedPeriod?.id === period.id) {
         setSelectedPeriod(null);
         setSlips([]);
@@ -159,7 +167,7 @@ export default function PayrollPage() {
         if (updated) loadSlips(updated);
       }
     } catch {
-      setMessage("خطا در انجام عملیات روی دوره");
+      /* refresh best-effort */
     }
   };
 
@@ -236,7 +244,13 @@ export default function PayrollPage() {
         </div>
       </div>
       {message && (
-        <p className="text-sm text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
+        <p
+          className={`text-sm rounded-xl px-3 py-2 border ${
+            message.startsWith("خطا")
+              ? "text-rose-300 bg-rose-500/10 border-rose-500/20"
+              : "text-emerald-300 bg-emerald-500/10 border-emerald-500/20"
+          }`}
+        >
           {message}
         </p>
       )}

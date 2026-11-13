@@ -92,7 +92,7 @@ echo ============================================================
 echo.
 
 :: Start Django Backend on all interfaces
-start "Mohaseb-Backend" cmd /k "set DJANGO_ALLOWED_HOSTS=* && set DJANGO_CORS_ALLOWED_ORIGINS=http://%LOCAL_IP%:4173 && "%BACKEND%\run_backend.bat" runserver 0.0.0.0:8000"
+start "Mohaseb-Backend" cmd /k "set DJANGO_ALLOWED_HOSTS=* && set DJANGO_DEBUG=false && set DJANGO_CORS_ALLOWED_ORIGINS=http://localhost:4173,http://127.0.0.1:4173,http://%LOCAL_IP%:4173 && "%BACKEND%\run_backend.bat" runserver 0.0.0.0:8000"
 
 :: Wait for backend to start
 timeout /t 3 /nobreak > nul

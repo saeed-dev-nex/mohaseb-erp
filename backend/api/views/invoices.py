@@ -35,7 +35,7 @@ from ..serializers import (
     ExpenseSerializer, StaffSerializer, VehicleTypeSerializer,
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
-from ..business_context import resolve_business
+from ..business_context import legacy_scope_q, resolve_business
 from ..audit import snapshot, record_audit, is_invoice_content_version
 from ..services.money import invoice_payment_totals, safe_spreadsheet_cell
 
@@ -118,8 +118,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='post-inventory')
     def post_inventory(self, request, pk=None):
         from ..services.inventory import post_sale
+        from .accounting import _require_write
 
         invoice = self.get_object()
+        if invoice.business_id is not None:
+            _require_write(request, invoice.business)
         try:
             post_sale(invoice, user=request.user)
         except ValueError as exc:
@@ -129,8 +132,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='unpost-inventory')
     def unpost_inventory(self, request, pk=None):
         from ..services.inventory import unpost_sale
+        from .accounting import _require_write
 
         invoice = self.get_object()
+        if invoice.business_id is not None:
+            _require_write(request, invoice.business)
         try:
             unpost_sale(invoice)
         except ValueError as exc:
@@ -145,9 +151,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related('items__service', 'payments__created_by', 'edit_requests')
         # ERP: when the caller selected a business, scope the list to it.
+        # Without a selection, non-superusers still only see unscoped
+        # records plus their own businesses' — never another business's.
         business = resolve_business(self.request)
         if business is not None:
             qs = qs.filter(business=business)
+        else:
+            qs = qs.filter(legacy_scope_q(self.request.user))
         status_filter = self.request.query_params.get('status', '')
         customer_id = self.request.query_params.get('customer', '')
         customer_name = self.request.query_params.get('customer_name', '')

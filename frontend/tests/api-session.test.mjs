@@ -15,6 +15,10 @@ test("API base preserves production protocol/port, supports relative config and 
     ],
     [undefined, "http://192.0.2.1:5173/login", "http://192.0.2.1:8000/api/"],
     [undefined, "https://example.test:4173/", "https://example.test:8000/api/"],
+    // Vite auto-increments its port when the default is taken; the API
+    // is still on 8000.
+    [undefined, "http://192.0.2.1:5174/login", "http://192.0.2.1:8000/api/"],
+    [undefined, "http://192.0.2.1:4174/", "http://192.0.2.1:8000/api/"],
     [
       "/api",
       "https://example.test:8443/login",

@@ -35,7 +35,7 @@ from ..serializers import (
     UserSerializer, BackupConfigSerializer, InvoiceSettingsSerializer, ChequeSerializer, InvoicePaymentSerializer, AuditLogSerializer, ChatMessageSerializer, SocialNetworkSerializer
 )
 from ..audit import snapshot, record_audit, is_invoice_content_version
-from ..business_context import resolve_business
+from ..business_context import legacy_scope_q, resolve_business
 from ..pagination import OptionalPageNumberPagination
 
 
@@ -84,9 +84,13 @@ class ServiceViewSet(viewsets.ModelViewSet):
         if active_only == 'true':
             qs = qs.filter(is_active=True)
         # ERP: scope the catalog to the caller's current business.
+        # Without a selection, non-superusers still only see unscoped
+        # records plus their own businesses' — never another business's.
         business = resolve_business(self.request)
         if business is not None:
             qs = qs.filter(business=business)
+        else:
+            qs = qs.filter(legacy_scope_q(self.request.user))
         return qs
 
     def perform_create(self, serializer):

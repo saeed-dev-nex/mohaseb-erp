@@ -3,7 +3,14 @@ export function resolveApiBaseURL(configured, location) {
   const url = configured
     ? new URL(configured, location.href)
     : new URL("/api/", location.href);
-  if (!configured && ["5173", "4173"].includes(location.port))
+  // Split-port serving: Vite dev/preview (5173/4173, plus the ports
+  // Vite auto-increments to when its default is taken) talk to the API
+  // on 8000. Any other port is a production serve and keeps its port.
+  const port = Number(location.port);
+  if (
+    !configured &&
+    ((port >= 5173 && port <= 5180) || (port >= 4173 && port <= 4180))
+  )
     url.port = "8000";
   url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
   url.search = "";

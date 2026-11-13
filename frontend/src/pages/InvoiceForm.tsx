@@ -1218,13 +1218,29 @@ const InvoiceForm = () => {
         } catch {
           /* storage blocked: non-fatal */
         }
+        // Attachments upload AFTER the invoice exists; a failed upload
+        // must not rebrand the (successful) save as a failure — the
+        // operator would resubmit the still-filled form and duplicate
+        // the invoice. Warn, then go to the created invoice.
+        let uploadFailed = false;
         for (const file of invoiceDocuments) {
           const fd = new FormData();
           fd.append("customer", String(form.customer));
           fd.append("invoice", String(data.id));
           fd.append("title", file.name);
           fd.append("file", file);
-          await documentsAPI.create(fd);
+          try {
+            await documentsAPI.create(fd);
+          } catch {
+            uploadFailed = true;
+          }
+        }
+        if (uploadFailed) {
+          try {
+            sessionStorage.setItem("mohaseb:upload-warning", "1");
+          } catch {
+            /* storage blocked: non-fatal */
+          }
         }
         navigate(`/invoices/${data.id}`);
       }

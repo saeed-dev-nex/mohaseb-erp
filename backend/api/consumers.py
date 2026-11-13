@@ -24,7 +24,11 @@ class ChatConsumer(AsyncJsonWebsocketConsumer):
 
         try:
             access_token = AccessToken(token)
-            self.user_id = access_token['user_id']
+            # SimpleJWT serializes the user_id claim as a string; the
+            # message payloads carry ORM ints — normalize once here so
+            # the per-message identity comparison can match (the same
+            # fix AlertsConsumer already carries).
+            self.user_id = int(access_token['user_id'])
             self.token_expires_at = access_token['exp']
         except (TokenError, KeyError, TypeError, ValueError):
             await self.close(code=4401)

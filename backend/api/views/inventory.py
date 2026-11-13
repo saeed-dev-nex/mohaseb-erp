@@ -9,7 +9,7 @@ auto-journals; drafts move nothing.
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Case, DecimalField, F, Max, Sum, When
+from django.db.models import Case, DecimalField, F, Max, ProtectedError, Sum, When
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -22,6 +22,7 @@ from ..serializers import (
     ProductSerializer, PurchaseInvoiceSerializer, StockMovementSerializer,
     WarehouseSerializer,
 )
+from ..services.accounting import retry_on_number_conflict
 from ..services.inventory import post_purchase, unpost_purchase
 from .accounting import _require_business, _require_write
 
@@ -40,6 +41,19 @@ class WarehouseViewSet(viewsets.ModelViewSet):
         business = _require_business(self.request)
         _require_write(self.request, business)
         serializer.save(business=business)
+
+    def perform_update(self, serializer):
+        business = _require_business(self.request)
+        _require_write(self.request, business)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        business = _require_business(self.request)
+        _require_write(self.request, business)
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError('این انبار دارای گردش است و حذف نمی‌شود.')
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -101,23 +115,50 @@ class PurchaseInvoiceViewSet(viewsets.ModelViewSet):
         supplier = serializer.validated_data.get('supplier')
         if supplier is not None and supplier.business_id not in (None, business.id):
             raise ValidationError({'supplier': 'تأمین‌کننده متعلق به این کسب‌وکار نیست.'})
-        last = (
-            PurchaseInvoice.objects.filter(business=business, fiscal_year=fiscal_year)
-            .aggregate(value=Max('number'))['value'] or 0
-        )
-        purchase = serializer.save(
-            business=business, fiscal_year=fiscal_year,
-            number=last + 1, created_by=request.user,
-        )
+        for line in serializer.validated_data.get('lines') or []:
+            product = line.get('product')
+            if product is not None and product.business_id != business.id:
+                raise ValidationError({'lines': 'کالای انتخاب‌شده متعلق به این کسب‌وکار نیست.'})
+
+        def _save():
+            last = (
+                PurchaseInvoice.objects.filter(business=business, fiscal_year=fiscal_year)
+                .aggregate(value=Max('number'))['value'] or 0
+            )
+            return serializer.save(
+                business=business, fiscal_year=fiscal_year,
+                number=last + 1, created_by=request.user,
+            )
+
+        purchase = retry_on_number_conflict(_save)
         return Response(
             self.get_serializer(purchase).data, status=status.HTTP_201_CREATED,
         )
+
+    def _validate_relations(self, business, data):
+        """Create validates relations from validated data; the update
+        path falls through to the serializer, so re-check the raw ids
+        here as well (supplier + every line's product)."""
+        from ..models import Customer, Product
+
+        supplier_id = data.get('supplier')
+        if supplier_id:
+            supplier = Customer.objects.filter(id=supplier_id).first()
+            if supplier is not None and supplier.business_id not in (None, business.id):
+                raise ValidationError({'supplier': 'تأمین‌کننده متعلق به این کسب‌وکار نیست.'})
+        for line in data.get('lines') or []:
+            product_id = line.get('product') if isinstance(line, dict) else None
+            if product_id:
+                product = Product.objects.filter(id=product_id).first()
+                if product is not None and product.business_id != business.id:
+                    raise ValidationError({'lines': 'کالای انتخاب‌شده متعلق به این کسب‌وکار نیست.'})
 
     def update(self, request, *args, **kwargs):
         purchase = self.get_object()
         _require_write(request, purchase.business)
         if purchase.status == 'posted':
             raise ValidationError('فاکتور خرید ثبت‌شده قابل ویرایش نیست؛ ابتدا آن را به پیش‌نویس برگردانید.')
+        self._validate_relations(purchase.business, request.data)
         return super().update(request, *args, **kwargs)
 
     def partial_update(self, request, *args, **kwargs):

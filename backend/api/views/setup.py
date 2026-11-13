@@ -11,6 +11,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .. import db_migration
@@ -44,6 +45,10 @@ class SetupStatusView(APIView):
 class SetupTestDatabaseView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    # Unauthenticated by design during first run — throttle it so the
+    # endpoint cannot be used as a credential/reachability oracle.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'setup'
 
     def post(self, request):
         if not _needs_setup():
@@ -63,6 +68,8 @@ class SetupConfigureDatabaseView(APIView):
 
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'setup'
 
     def post(self, request):
         if not _needs_setup():
@@ -89,6 +96,8 @@ class SetupConfigureDatabaseView(APIView):
 class SetupCreateAdminView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'setup'
 
     def post(self, request):
         username = str(request.data.get('username') or '').strip()

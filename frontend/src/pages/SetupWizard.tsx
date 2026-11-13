@@ -10,6 +10,7 @@ type Step = "loading" | "database" | "restart" | "admin" | "done";
 export default function SetupWizard() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("loading");
+  const [loadFailed, setLoadFailed] = useState(false);
   const [engine, setEngine] = useState("sqlite");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -29,7 +30,9 @@ export default function SetupWizard() {
     password_confirm: "",
   });
 
-  useEffect(() => {
+  const loadStatus = React.useCallback(() => {
+    setStep("loading");
+    setLoadFailed(false);
     setupAPI
       .status()
       .then((res) => {
@@ -40,8 +43,18 @@ export default function SetupWizard() {
         setEngine(res.data.engine);
         setStep(res.data.engine === "postgresql" ? "admin" : "database");
       })
-      .catch(() => setStep("database"));
+      .catch(() => {
+        // Indeterminate is NOT "setup needed": the backend may be down
+        // or this origin may not be API-allowed. Stay on a retryable
+        // error instead of marching into the database step blind.
+        setLoadFailed(true);
+        setStep("database");
+      });
   }, [navigate]);
+
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
 
   const detailOf = (err: unknown, fallback: string) =>
     (err as { response?: { data?: { detail?: string } } })?.response?.data
@@ -113,6 +126,23 @@ export default function SetupWizard() {
 
         {step === "loading" && (
           <p className="text-center text-slate-400 text-sm">در حال بررسی…</p>
+        )}
+
+        {loadFailed && step !== "loading" && (
+          <div className="space-y-2 text-sm text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">
+            <p>
+              وضعیت سرور مشخص نشد؛ ممکن است بک‌اند هنوز بالا نیامده باشد یا این
+              آدرس در فهرست مبدأهای مجاز API نباشد. تا وقتی اتصال برقرار نشده،
+              ادامهٔ ویزارد نتیجه‌ای ندارد.
+            </p>
+            <button
+              type="button"
+              onClick={loadStatus}
+              className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-100"
+            >
+              تلاش دوباره
+            </button>
+          </div>
         )}
 
         {step === "database" && (

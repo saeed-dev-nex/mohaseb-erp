@@ -207,6 +207,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'login': '5/min',
         'token_refresh': '30/min',
+        'setup': '20/hour',
     },
 }
 
