@@ -777,6 +777,57 @@ export const setupAPI = {
     api.post<{ created: boolean; username: string }>("setup/admin/", data),
 };
 
+// ---- Self-service registration (license-gated) & account security ----
+export interface RegistrationCode {
+  id: number;
+  code_hint: string;
+  note: string;
+  status: "available" | "used" | "expired" | "revoked";
+  created_by_username: string;
+  created_at: string;
+  expires_at: string | null;
+  used_at: string | null;
+  used_by_username: string;
+  revoked: boolean;
+}
+
+export const registrationCodesAPI = {
+  list: () => api.get<RegistrationCode[]>("registration-codes/"),
+  generate: (data: { count: number; note?: string; valid_days?: number }) =>
+    api.post<{ codes: string[] }>("registration-codes/", data),
+  revoke: (id: number) =>
+    api.post<RegistrationCode>(`registration-codes/${id}/revoke/`, {}),
+};
+
+export const registrationAPI = {
+  checkCode: (code: string) =>
+    api.post<{ valid: boolean }>("registration/check-code/", { code }),
+  register: (data: Payload) => api.post("registration/register/", data),
+  verifyEmail: (data: { username: string; code: string }) =>
+    api.post("registration/verify-email/", data),
+  resendCode: (username: string) =>
+    api.post("registration/resend-code/", { username }),
+};
+
+export const accountSecurityAPI = {
+  captcha: () => api.get<{ id: string; image: string }>("auth/captcha/"),
+  forgotPassword: (data: Payload) => api.post("auth/forgot-password/", data),
+  resetPassword: (data: Payload) => api.post("auth/reset-password/", data),
+  otpRequest: (identifier: string) =>
+    api.post("auth/otp/request/", { identifier }),
+  otpVerify: (data: { identifier: string; code: string }) =>
+    api.post<{ access: string; refresh?: string }>("auth/otp/verify/", data, {
+      withCredentials: true,
+      headers: { "X-Client-Type": "web" },
+    }),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    api.post<{ changed: boolean; access: string; refresh?: string }>(
+      "auth/change-password/",
+      data,
+      { withCredentials: true, headers: { "X-Client-Type": "web" } },
+    ),
+};
+
 // ---- Tax & fixed assets (ERP phase 4) ----
 export interface VatReport {
   year: number;

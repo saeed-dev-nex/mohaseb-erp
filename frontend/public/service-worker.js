@@ -1,6 +1,6 @@
 const CACHE_NAME = 'mohaseb-erp-shell-v1-static-only';
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/fonts/vazirmatn-1.woff2', '/fonts/vazirmatn-2.woff2', '/fonts/vazirmatn-3.woff2'];
-const SHELL_ROUTE = /^\/(?:login|setup|customers(?:\/\d+)?|services|invoices(?:\/(?:new|\d+(?:\/edit)?))?|reports|expenses|cheques|staff|users|chat|settings|accounting|inventory|payroll|tax|assets)?\/?$/;
+const SHELL_ROUTE = /^\/(?:login|setup|register|forgot-password|create-business|customers(?:\/\d+)?|services|invoices(?:\/(?:new|\d+(?:\/edit)?))?|reports|expenses|cheques|staff|users|chat|settings|accounting|inventory|payroll|tax|assets)?\/?$/;
 
 function cacheTarget(request) {
   const url = new URL(request.url);

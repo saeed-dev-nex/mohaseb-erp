@@ -15,6 +15,10 @@ from .views import (
     FixedAssetViewSet, DepreciationRunViewSet,
     SetupStatusView, SetupTestDatabaseView, SetupConfigureDatabaseView,
     SetupCreateAdminView,
+    CaptchaView, ChangePasswordView, CheckRegistrationCodeView,
+    ForgotPasswordView, LoginOtpRequestView, LoginOtpVerifyView,
+    RegistrationCodeViewSet, RegisterView, ResetPasswordView,
+    ResendVerificationView, VerifyEmailView,
     WelcomeSettingsViewSet, SocialNetworkViewSet
 )
 from .serializers import SafeTokenRefreshSerializer
@@ -55,6 +59,7 @@ router.register(r'payslips', PayslipViewSet, basename='payslip')
 router.register(r'moadian-submissions', MoadianSubmissionViewSet, basename='moadian-submission')
 router.register(r'fixed-assets', FixedAssetViewSet, basename='fixed-asset')
 router.register(r'depreciation-runs', DepreciationRunViewSet, basename='depreciation-run')
+router.register(r'registration-codes', RegistrationCodeViewSet, basename='registration-code')
 
 
 urlpatterns = [
@@ -69,6 +74,16 @@ urlpatterns = [
     path('setup/test-database/', SetupTestDatabaseView.as_view(), name='setup_test_database'),
     path('setup/configure-database/', SetupConfigureDatabaseView.as_view(), name='setup_configure_database'),
     path('setup/admin/', SetupCreateAdminView.as_view(), name='setup_admin'),
+    path('registration/check-code/', CheckRegistrationCodeView.as_view(), name='registration_check_code'),
+    path('registration/register/', RegisterView.as_view(), name='registration_register'),
+    path('registration/verify-email/', VerifyEmailView.as_view(), name='registration_verify_email'),
+    path('registration/resend-code/', ResendVerificationView.as_view(), name='registration_resend_code'),
+    path('auth/captcha/', CaptchaView.as_view(), name='auth_captcha'),
+    path('auth/forgot-password/', ForgotPasswordView.as_view(), name='auth_forgot_password'),
+    path('auth/reset-password/', ResetPasswordView.as_view(), name='auth_reset_password'),
+    path('auth/otp/request/', LoginOtpRequestView.as_view(), name='auth_otp_request'),
+    path('auth/otp/verify/', LoginOtpVerifyView.as_view(), name='auth_otp_verify'),
+    path('auth/change-password/', ChangePasswordView.as_view(), name='auth_change_password'),
     path('payroll/settings/', PayrollSettingsView.as_view(), name='payroll_settings'),
     path('tax/settings/', TaxSettingsView.as_view(), name='tax_settings'),
     path('tax/vat-report/', VatReportView.as_view(), name='tax_vat_report'),

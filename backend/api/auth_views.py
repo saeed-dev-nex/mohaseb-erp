@@ -12,6 +12,7 @@ token in the response body.
 """
 
 from django.conf import settings
+from django.core.cache import cache
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -47,20 +48,67 @@ def _delete_refresh_cookie(response):
     response.delete_cookie(REFRESH_COOKIE_NAME, path=REFRESH_COOKIE_PATH, samesite='Lax')
 
 
+# --- Progressive CAPTCHA ------------------------------------------------
+# A CAPTCHA is only demanded after repeated failed logins for the
+# same username from the same IP inside a short window, so regular
+# users never see one while password guessing quickly runs into it.
+
+CAPTCHA_AFTER_FAILURES = 2
+_LOGIN_FAIL_WINDOW_SECONDS = 900
+
+
+def _login_fail_key(request, username):
+    ip = request.META.get('REMOTE_ADDR', '')
+    return f'login-fails:{ip}:{(username or "").strip().lower()}'
+
+
+def _login_failures(request, username):
+    return cache.get(_login_fail_key(request, username), 0)
+
+
 class ThrottledTokenObtainPairView(TokenObtainPairView):
-    """Login: at most ``login`` rate (5/min per IP) from settings."""
+    """Login: throttled; CAPTCHA required after repeated failures."""
 
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = 'login'
 
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        if response.status_code == 200 and response.data.get('refresh'):
-            _set_refresh_cookie(request, response, response.data['refresh'])
-            if _is_web_client(request):
-                # The web client must not persist the refresh token where
-                # scripts can read it; it lives only in the httpOnly cookie.
-                response.data.pop('refresh', None)
+        username = str(request.data.get('username') or '')
+        key = _login_fail_key(request, username)
+        if _login_failures(request, username) >= CAPTCHA_AFTER_FAILURES:
+            from .captcha import verify_challenge
+
+            if not verify_challenge(
+                request.data.get('captcha_id'), request.data.get('captcha_answer'),
+            ):
+                return Response(
+                    {'detail': 'برای ادامه، کپچا را درست وارد کنید.',
+                     'captcha_required': True},
+                    status=400,
+                )
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception:
+            # Failed logins raise (DRF authentication errors) instead of
+            # returning a response; count them on the way out.
+            cache.set(
+                key, _login_failures(request, username) + 1,
+                _LOGIN_FAIL_WINDOW_SECONDS,
+            )
+            raise
+        if response.status_code == 200:
+            cache.delete(key)
+            if response.data.get('refresh'):
+                _set_refresh_cookie(request, response, response.data['refresh'])
+                if _is_web_client(request):
+                    # The web client must not persist the refresh token where
+                    # scripts can read it; it lives only in the httpOnly cookie.
+                    response.data.pop('refresh', None)
+        else:
+            cache.set(
+                key, _login_failures(request, username) + 1,
+                _LOGIN_FAIL_WINDOW_SECONDS,
+            )
         return response
 
 

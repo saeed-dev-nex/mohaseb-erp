@@ -64,7 +64,18 @@ class BusinessViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def create(self, request, *args, **kwargs):
         if not request.user.is_superuser:
-            raise PermissionDenied('ساخت کسب‌وکار جدید فقط برای مدیر ارشد ممکن است.')
+            # Self-service customers (registered with a license code)
+            # may create exactly one business: their first.
+            from ..models import RegistrationCode
+
+            licensed = RegistrationCode.objects.filter(
+                used_by=request.user,
+            ).exists()
+            already_owner = BusinessMembership.objects.filter(
+                user=request.user, role='owner',
+            ).exists()
+            if not licensed or already_owner:
+                raise PermissionDenied('ساخت کسب‌وکار جدید فقط برای مدیر ارشد ممکن است.')
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         business = serializer.save(created_by=request.user)

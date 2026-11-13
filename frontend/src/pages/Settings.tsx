@@ -15,6 +15,7 @@ import { BackupTab } from "./settings/BackupTab";
 import { DatabaseTab } from "./settings/DatabaseTab";
 import { UpdateTab } from "./settings/UpdateTab";
 import { BusinessesTab } from "./settings/BusinessesTab";
+import { RegistrationCodesTab } from "./settings/RegistrationCodesTab";
 import { ServerFolderPicker } from "./settings/ServerFolderPicker";
 
 type ProfileForm = {
@@ -114,6 +115,12 @@ const Settings = () => {
       id: "businesses",
       label: "کسب‌وکارها",
       icon: "🏢",
+      visible: isSuperuser,
+    },
+    {
+      id: "licenses",
+      label: "کدهای ثبت‌نام",
+      icon: "🎟️",
       visible: isSuperuser,
     },
     { id: "invoice", label: "تنظیمات فاکتور", icon: "🧾", visible: isManager },
@@ -1059,6 +1066,9 @@ const Settings = () => {
           {activeTab === "businesses" && isSuperuser && (
             <BusinessesTab isSuperuser={isSuperuser} />
           )}
+
+          {/* ── Registration codes (licenses) Section ── */}
+          {activeTab === "licenses" && isSuperuser && <RegistrationCodesTab />}
           <ServerFolderPicker
             open={docsPickerOpen}
             title="مدارک مشتریان"

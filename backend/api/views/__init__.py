@@ -40,6 +40,12 @@ from .accounting import (
 )
 from .database_config import DatabaseConfigViewSet
 from .management_views import AuditLogViewSet, DashboardViewSet, StaffViewSet, UserViewSet
+from .registration import (
+    CaptchaView, ChangePasswordView, CheckRegistrationCodeView,
+    ForgotPasswordView, LoginOtpRequestView, LoginOtpVerifyView,
+    RegistrationCodeViewSet, RegisterView, ResetPasswordView,
+    ResendVerificationView, VerifyEmailView,
+)
 
 __all__ = [
     'IsManagerOrAdmin', 'IsSuperuser', 'database_revision',
@@ -59,4 +65,8 @@ __all__ = [
     'MoadianSubmissionViewSet', 'FixedAssetViewSet', 'DepreciationRunViewSet',
     'SetupStatusView', 'SetupTestDatabaseView', 'SetupConfigureDatabaseView',
     'SetupCreateAdminView',
+    'CaptchaView', 'ChangePasswordView', 'CheckRegistrationCodeView',
+    'ForgotPasswordView', 'LoginOtpRequestView', 'LoginOtpVerifyView',
+    'RegistrationCodeViewSet', 'RegisterView', 'ResetPasswordView',
+    'ResendVerificationView', 'VerifyEmailView',
 ]
