@@ -28,6 +28,23 @@ class CorsPreflightTests(APITestCase):
         self.assertIn('x-client-type', allowed)
         self.assertEqual(response.headers.get('Access-Control-Allow-Origin'), 'http://127.0.0.1:5173')
 
+    def test_cors_preflight_allows_business_id_header(self):
+        # ERP regression: every API request carries X-Business-Id once a
+        # business is selected; without it in CORS_ALLOW_HEADERS the
+        # browser blocks the whole API in split-port setups
+        # (frontend :4173 -> API :8000) — the app looks "unresponsive"
+        # while the server is perfectly healthy.
+        response = self.client.options(
+            '/api/products/',
+            HTTP_ORIGIN='http://localhost:4173',
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD='GET',
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS='authorization,x-business-id',
+        )
+        self.assertEqual(response.status_code, 200)
+        allowed = response.headers.get('Access-Control-Allow-Headers', '').lower()
+        self.assertIn('x-business-id', allowed)
+        self.assertEqual(response.headers.get('Access-Control-Allow-Origin'), 'http://localhost:4173')
+
 
 class CookieAuthTests(APITestCase):
     def setUp(self):
