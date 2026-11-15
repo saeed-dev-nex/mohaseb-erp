@@ -64,19 +64,46 @@ def ensure_default_business():
 
 
 def seed_template_catalog(business):
-    """Seed the business's services/items from its job template.
+    """Seed the business's starter catalog from its job template.
 
-    Idempotent: a catalog entry is created only when the business has
-    no service with the same title, so re-applying never duplicates
-    and never touches prices the user has since set. Returns
-    {'created': n, 'existing': m}.
+    The catalog lands where the trade actually keeps it (see
+    CATALOG_PROFILES): product trades (shop, fuel, trade, …) get
+    inventory Products with generated codes; service trades get
+    Service rows. Idempotent: an entry is created only when the
+    business has no item with the same title/name, so re-applying
+    never duplicates and never touches prices the user has since set.
+    Returns {'created': n, 'existing': m}.
     """
-    from ..business_templates import template_catalog
-    from ..models import Service
+    from ..business_templates import template_catalog, template_catalog_profile
+    from ..models import Product, Service
 
+    profile = template_catalog_profile(business.template_key)
     created = 0
     existing = 0
-    for entry in template_catalog(business.template_key):
+    entries = template_catalog(business.template_key)
+
+    if profile['kind'] == 'product':
+        highest = 1000
+        for code in Product.objects.filter(business=business).values_list('code', flat=True):
+            if code.isdigit():
+                highest = max(highest, int(code))
+        for entry in entries:
+            title = entry['title']
+            if Product.objects.filter(business=business, name=title).exists():
+                existing += 1
+                continue
+            highest += 1
+            Product.objects.create(
+                business=business,
+                code=str(highest),
+                name=title,
+                unit=profile['default_unit'],
+                sale_price=entry.get('default_main_price') or 0,
+            )
+            created += 1
+        return {'created': created, 'existing': existing}
+
+    for entry in entries:
         title = entry['title']
         if Service.objects.filter(business=business, title=title).exists():
             existing += 1

@@ -38,7 +38,7 @@ async function loadComponents(relative, extraExports = "", environment = {}) {
           }));
           plugin.onLoad({ filter: /.*/, namespace: "api-fixture" }, () => ({
             contents:
-              "export const chequesAPI = globalThis.__api?.chequesAPI ?? {}; export const customersAPI = {}; export const servicesAPI = globalThis.__api?.servicesAPI ?? {}; export const businessesAPI = { list: () => Promise.resolve({ data: [] }) }; export const BUSINESS_STORAGE_KEY = 'mohaseb-erp:business-id';",
+              "export const chequesAPI = globalThis.__api?.chequesAPI ?? {}; export const customersAPI = {}; export const servicesAPI = globalThis.__api?.servicesAPI ?? {}; export const inventoryAPI = {}; export const businessesAPI = { list: () => Promise.resolve({ data: [] }) }; export const BUSINESS_STORAGE_KEY = 'mohaseb-erp:business-id';",
           }));
           if (extraExports)
             plugin.onLoad(

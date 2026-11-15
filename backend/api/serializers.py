@@ -887,6 +887,7 @@ class BusinessSerializer(serializers.ModelSerializer):
     template_title = serializers.SerializerMethodField()
     terminology = serializers.SerializerMethodField()
     invoice_profile = serializers.SerializerMethodField()
+    catalog_profile = serializers.SerializerMethodField()
     effective_modules = serializers.SerializerMethodField()
     current_fiscal_year = FiscalYearSerializer(read_only=True)
     my_role = serializers.SerializerMethodField()
@@ -895,7 +896,7 @@ class BusinessSerializer(serializers.ModelSerializer):
         model = Business
         fields = [
             'id', 'name', 'template_key', 'template_title', 'terminology',
-            'invoice_profile',
+            'invoice_profile', 'catalog_profile',
             'person_type', 'legal_name', 'national_id', 'economic_code',
             'registration_number', 'phone', 'address', 'modules_override',
             'effective_modules', 'current_fiscal_year', 'my_role',
@@ -913,6 +914,11 @@ class BusinessSerializer(serializers.ModelSerializer):
         from .business_templates import template_invoice_profile
 
         return template_invoice_profile(obj.template_key)
+
+    def get_catalog_profile(self, obj):
+        from .business_templates import template_catalog_profile
+
+        return template_catalog_profile(obj.template_key)
 
     def get_effective_modules(self, obj):
         return obj.effective_modules()

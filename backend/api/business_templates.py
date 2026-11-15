@@ -300,6 +300,46 @@ TEMPLATE_CHOICES = [(key, spec['title']) for key, spec in TEMPLATES.items()]
 
 DEFAULT_TEMPLATE_KEY = 'services_repair'
 
+# Catalog profile per trade — what the business's «کالاها و خدمات»
+# catalog IS and which entry-form options it offers. ``kind='product'``
+# trades stock physical goods: their catalog is the inventory Product
+# list (code/barcode/unit/sale price, stock from purchases), and the
+# starter catalog seeds Products. ``kind='service'`` trades sell
+# services/menu items: the catalog is Service rows, and the entry form
+# shows the commission block and the extra-service toggle only where
+# the trade actually works that way (repair shops pay technician
+# commission; salons pay operator commission; a restaurant menu item
+# has neither). Kept as one mapping so a trade's catalog behaviour is
+# reviewable at a glance.
+CATALOG_PROFILES = {
+    'services_repair': {'kind': 'service', 'commission': True, 'extra_service': True},
+    'retail': {'kind': 'product', 'default_unit': 'عدد'},
+    'restaurant': {'kind': 'service', 'commission': False, 'extra_service': False},
+    'gas_station': {'kind': 'product', 'default_unit': 'لیتر'},
+    'trade': {'kind': 'product', 'default_unit': 'عدد'},
+    'manufacturing': {'kind': 'product', 'default_unit': 'عدد'},
+    'cafe': {'kind': 'service', 'commission': False, 'extra_service': False},
+    'beauty_salon': {'kind': 'service', 'commission': True, 'extra_service': False},
+    'clinic': {'kind': 'service', 'commission': False, 'extra_service': False},
+    'carwash': {'kind': 'service', 'commission': False, 'extra_service': False},
+    'education': {'kind': 'service', 'commission': False, 'extra_service': False},
+    'general': {'kind': 'service', 'commission': False, 'extra_service': False},
+}
+
+_DEFAULT_CATALOG_PROFILE = {'kind': 'service', 'commission': False, 'extra_service': False}
+
+
+def template_catalog_profile(key):
+    """Catalog profile for *key* (resolved like get_template)."""
+    resolved = key if key in TEMPLATES else DEFAULT_TEMPLATE_KEY
+    profile = CATALOG_PROFILES.get(resolved) or _DEFAULT_CATALOG_PROFILE
+    return {
+        'kind': profile.get('kind', 'service'),
+        'commission': bool(profile.get('commission', False)),
+        'extra_service': bool(profile.get('extra_service', False)),
+        'default_unit': profile.get('default_unit') or 'عدد',
+    }
+
 
 def get_template(key):
     """Template spec for *key*, falling back to the default template."""
@@ -328,6 +368,7 @@ def templates_payload():
             'modules': list(spec['modules']),
             'terminology': spec['terminology'],
             'invoice_profile': spec.get('invoice_profile') or {'vehicle': False, 'extras': []},
+            'catalog_profile': template_catalog_profile(key),
             'catalog': list(spec.get('catalog') or []),
         }
         for key, spec in TEMPLATES.items()

@@ -367,6 +367,13 @@ export interface InvoiceProfile {
   extras: InvoiceExtraField[];
 }
 
+export interface CatalogProfile {
+  kind: "service" | "product";
+  commission: boolean;
+  extra_service: boolean;
+  default_unit: string;
+}
+
 export interface Business {
   id: number;
   name: string;
@@ -374,6 +381,7 @@ export interface Business {
   template_title: string;
   terminology: Record<string, string>;
   invoice_profile: InvoiceProfile;
+  catalog_profile: CatalogProfile;
   person_type: "legal" | "individual";
   legal_name: string;
   national_id: string;

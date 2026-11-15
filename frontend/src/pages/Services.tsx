@@ -9,6 +9,7 @@ import {
   serviceKeys,
 } from "../hooks/useServices";
 import PriceInput from "../components/PriceInput";
+import ProductsCatalog from "../components/ProductsCatalog";
 import { toPersianKeyboard } from "../utils/persian";
 import {
   Button,
@@ -102,6 +103,14 @@ const ServiceModal = ({
 }: ServiceModalProps) => {
   const { current: currentBusiness } = useBusiness();
   const itemLabel = currentBusiness?.terminology?.item ?? "خدمت";
+  // The entry form only offers what this trade actually has: the
+  // commission block and the extra-service toggle come from the
+  // template's catalog profile (repair shops and salons use them,
+  // a restaurant menu does not). With no business selected the
+  // legacy all-options form stays.
+  const catalogProfile = currentBusiness?.catalog_profile;
+  const showCommission = catalogProfile ? catalogProfile.commission : true;
+  const showExtra = catalogProfile ? catalogProfile.extra_service : true;
   const [form, setForm] = useState<ServiceFormState>(
     (initial as ServiceFormState | null) || emptyForm,
   );
@@ -153,55 +162,61 @@ const ServiceModal = ({
           </F>
         </div>
 
-        {/* Commission */}
-        <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 space-y-3">
-          <p className="text-yellow-400 text-xs font-semibold flex items-center gap-1.5">
-            💼 تنظیمات کارمزد
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <F label="کارمزد پیش‌فرض">
-              <PriceInput
-                value={form.default_commission}
-                onChange={(v) => set("default_commission", v)}
-                borderColor="border-yellow-500/30"
-              />
-            </F>
-            <F label="برچسب کارمزد">
-              <input
-                type="text"
-                className={inp}
-                value={form.commission_label}
-                onChange={(e) => set("commission_label", e.target.value)}
-                placeholder="کارمزد"
-              />
-            </F>
+        {/* Commission — only for trades whose catalog profile has it */}
+        {showCommission && (
+          <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4 space-y-3">
+            <p className="text-yellow-400 text-xs font-semibold flex items-center gap-1.5">
+              💼 تنظیمات کارمزد
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <F label="کارمزد پیش‌فرض">
+                <PriceInput
+                  value={form.default_commission}
+                  onChange={(v) => set("default_commission", v)}
+                  borderColor="border-yellow-500/30"
+                />
+              </F>
+              <F label="برچسب کارمزد">
+                <input
+                  type="text"
+                  className={inp}
+                  value={form.commission_label}
+                  onChange={(e) => set("commission_label", e.target.value)}
+                  placeholder="کارمزد"
+                />
+              </F>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Extra */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => set("has_extra", !form.has_extra)}
-            aria-pressed={form.has_extra}
-            aria-label="فعال‌سازی خدمت اضافه"
-            className={`relative w-11 h-6 rounded-full transition-all ${form.has_extra ? "bg-blue-600" : "bg-slate-600"}`}
-          >
-            <span
-              className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${form.has_extra ? "right-0.5" : "right-5"}`}
-            />
-          </button>
-          <span className="text-slate-300 text-sm">دارای خدمت اضافه</span>
-        </div>
-        {form.has_extra && (
-          <F label="برچسب خدمت اضافه">
-            <input
-              className={inp}
-              value={form.extra_label || ""}
-              onChange={(e) => set("extra_label", e.target.value)}
-              placeholder="مثال: هزینه ارسال"
-            />
-          </F>
+        {/* Extra service — only for trades whose catalog profile has it */}
+        {showExtra && (
+          <>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => set("has_extra", !form.has_extra)}
+                aria-pressed={form.has_extra}
+                aria-label="فعال‌سازی خدمت اضافه"
+                className={`relative w-11 h-6 rounded-full transition-all ${form.has_extra ? "bg-blue-600" : "bg-slate-600"}`}
+              >
+                <span
+                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${form.has_extra ? "right-0.5" : "right-5"}`}
+                />
+              </button>
+              <span className="text-slate-300 text-sm">دارای خدمت اضافه</span>
+            </div>
+            {form.has_extra && (
+              <F label="برچسب خدمت اضافه">
+                <input
+                  className={inp}
+                  value={form.extra_label || ""}
+                  onChange={(e) => set("extra_label", e.target.value)}
+                  placeholder="مثال: هزینه ارسال"
+                />
+              </F>
+            )}
+          </>
         )}
 
         {/* Active toggle */}
@@ -210,7 +225,7 @@ const ServiceModal = ({
             type="button"
             onClick={() => set("is_active", !form.is_active)}
             aria-pressed={form.is_active}
-            aria-label="فعال‌سازی خدمت"
+            aria-label={`فعال‌سازی ${itemLabel}`}
             className={`relative w-11 h-6 rounded-full transition-all ${form.is_active ? "bg-green-600" : "bg-slate-600"}`}
           >
             <span
@@ -218,7 +233,7 @@ const ServiceModal = ({
             />
           </button>
           <span className="text-slate-300 text-sm">
-            {form.is_active ? "خدمت فعال" : "خدمت غیرفعال"}
+            {form.is_active ? `${itemLabel} فعال` : `${itemLabel} غیرفعال`}
           </span>
         </div>
       </div>
@@ -245,6 +260,7 @@ const Services = () => {
   // کالاها, a restaurant its menu items, a salon its خدمات.
   const { current: currentBusiness } = useBusiness();
   const itemLabel = currentBusiness?.terminology?.item ?? "خدمات";
+  const catalogProfile = currentBusiness?.catalog_profile;
   const queryClient = useQueryClient();
   const { data, isFetching, error: loadError, refetch } = useServices();
   const list = (data ?? []) as ServiceRow[];
@@ -319,6 +335,14 @@ const Services = () => {
       setDeleting(false);
     }
   };
+
+  // Stock trades (shop, fuel station, trade, manufacturing) keep their
+  // catalog as inventory products, not services — a different entry
+  // surface altogether (code/barcode/unit/sale price; stock comes from
+  // purchases, never from a service-style form).
+  if (catalogProfile?.kind === "product") {
+    return <ProductsCatalog itemLabel={itemLabel} profile={catalogProfile} />;
+  }
 
   return (
     <div className="space-y-6">
