@@ -9,7 +9,7 @@ from .views import (
     UserViewSet, BackupConfigViewSet, DatabaseConfigViewSet, AppUpdateViewSet, InvoiceSettingsViewSet, ChequeViewSet, AuditLogViewSet, ChatMessageViewSet,
     BusinessViewSet, BusinessTemplateListView,
     AccountViewSet, JournalEntryViewSet, ChartSeedView, TrialBalanceView, AccountLedgerView,
-    WarehouseViewSet, ProductViewSet, PurchaseInvoiceViewSet, KardexView, StockAdjustView,
+    WarehouseViewSet, ProductViewSet, ProductCategoryViewSet, PurchaseInvoiceViewSet, KardexView, StockAdjustView,
     StockTransferViewSet, StockCountViewSet, InventoryAlertsView, InventorySettingsView,
     EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView, PayslipViewSet,
     TaxSettingsView, VatReportView, SeasonalReportView, MoadianSubmissionViewSet,
@@ -53,6 +53,7 @@ router.register(r'accounts', AccountViewSet, basename='account')
 router.register(r'journal-entries', JournalEntryViewSet, basename='journal-entry')
 router.register(r'warehouses', WarehouseViewSet, basename='warehouse')
 router.register(r'products', ProductViewSet, basename='product')
+router.register(r'product-categories', ProductCategoryViewSet, basename='product_category')
 router.register(r'purchases', PurchaseInvoiceViewSet, basename='purchase')
 router.register(r'stock-transfers', StockTransferViewSet, basename='stock-transfer')
 router.register(r'stock-counts', StockCountViewSet, basename='stock-count')

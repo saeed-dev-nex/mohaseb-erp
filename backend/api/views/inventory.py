@@ -18,12 +18,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import (
-    InventorySettings, Product, PurchaseInvoice, StockCount, StockCountLine,
+    InventorySettings, Product, ProductCategory, PurchaseInvoice, StockCount, StockCountLine,
     StockMovement, StockTransfer, Warehouse,
 )
 from .common import HasBusinessModuleAccess
 from ..serializers import (
-    InventorySettingsSerializer, ProductSerializer, PurchaseInvoiceSerializer,
+    InventorySettingsSerializer, ProductCategorySerializer, ProductSerializer, PurchaseInvoiceSerializer,
     StockCountSerializer, StockMovementSerializer, StockTransferSerializer,
     WarehouseSerializer,
 )
@@ -66,6 +66,62 @@ class WarehouseViewSet(viewsets.ModelViewSet):
             raise ValidationError('این انبار دارای گردش است و حذف نمی‌شود.')
 
 
+class ProductCategoryViewSet(viewsets.ModelViewSet):
+    """The business's product category tree (گروه ← نوع ← برند)."""
+
+    serializer_class = ProductCategorySerializer
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'inventory'
+    pagination_class = None
+
+    def get_queryset(self):
+        return _require_business(self.request).product_categories.all()
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        try:
+            context['business'] = _require_business(self.request)
+        except Exception:
+            context['business'] = None
+        return context
+
+    def perform_create(self, serializer):
+        business = _require_business(self.request)
+        _require_write(self.request, business)
+        serializer.save(business=business)
+
+    def perform_update(self, serializer):
+        business = _require_business(self.request)
+        _require_write(self.request, business)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        business = _require_business(self.request)
+        _require_write(self.request, business)
+        if instance.children.exists():
+            raise ValidationError(
+                'این دسته زیردسته دارد؛ اول زیردسته‌ها را جابه‌جا یا حذف کنید.'
+            )
+        instance.delete()
+
+    @action(detail=False, methods=['post'], url_path='seed-defaults')
+    def seed_defaults(self, request):
+        """Create the trade's starter tree for businesses that
+        predate categories (idempotent)."""
+        business = _require_business(request)
+        _require_write(request, business)
+        from ..services.business_setup import seed_template_categories
+
+        result = seed_template_categories(business)
+        categories = business.product_categories.all()
+        return Response({
+            **result,
+            'categories': ProductCategorySerializer(
+                categories, many=True, context=self.get_serializer_context(),
+            ).data,
+        })
+
+
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
@@ -74,7 +130,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         business = _require_business(self.request)
-        return business.products.annotate(
+        queryset = business.products.select_related('category').annotate(
             stock_qty=Sum(
                 Case(
                     When(movements__kind__in=IN_KINDS, then=F('movements__quantity')),
@@ -83,10 +139,35 @@ class ProductViewSet(viewsets.ModelViewSet):
                 )
             )
         )
+        category_id = self.request.query_params.get('category')
+        if category_id:
+            # A category filter covers its whole subtree (a brand's
+            # products also belong to its group).
+            subtree = set()
+            children_by_parent = {}
+            for node in business.product_categories.all():
+                children_by_parent.setdefault(node.parent_id, []).append(node.id)
+            stack = [int(category_id)] if str(category_id).isdigit() else []
+            while stack:
+                node_id = stack.pop()
+                if node_id in subtree:
+                    continue
+                subtree.add(node_id)
+                stack.extend(children_by_parent.get(node_id, []))
+            queryset = queryset.filter(category_id__in=subtree)
+        return queryset
+
+    def _guard_category(self, serializer, business):
+        category = serializer.validated_data.get('category')
+        if category is not None and category.business_id != business.id:
+            raise ValidationError(
+                {'category': 'دسته‌بندی باید از همین کسب‌وکار باشد.'}
+            )
 
     def perform_create(self, serializer):
         business = _require_business(self.request)
         _require_write(self.request, business)
+        self._guard_category(serializer, business)
         if (serializer.validated_data.get('code') or '').strip():
             serializer.save(business=business)
             return
@@ -112,6 +193,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         business = _require_business(self.request)
         _require_write(self.request, business)
+        self._guard_category(serializer, business)
         serializer.save()
 
     def perform_destroy(self, instance):

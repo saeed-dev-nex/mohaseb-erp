@@ -115,3 +115,33 @@ def seed_template_catalog(business):
         )
         created += 1
     return {'created': created, 'existing': existing}
+
+
+def seed_template_categories(business):
+    """Seed the trade's starter category tree (idempotent).
+
+    Nodes are matched by (parent, name) inside the business, so
+    re-applying — e.g. from the «دسته‌های پیش‌فرض شغل» button for a
+    business created before categories existed — never duplicates
+    and never renames what the user has since edited elsewhere.
+    Returns {'created': n, 'existing': m}.
+    """
+    from ..business_templates import template_category_tree
+    from ..models import ProductCategory
+
+    counts = {'created': 0, 'existing': 0}
+
+    def walk(nodes, parent):
+        if isinstance(nodes, dict):
+            items = nodes.items()
+        else:
+            items = [(name, []) for name in nodes]
+        for name, children in items:
+            node, was_created = ProductCategory.objects.get_or_create(
+                business=business, parent=parent, name=name,
+            )
+            counts['created' if was_created else 'existing'] += 1
+            walk(children, node)
+
+    walk(template_category_tree(business.template_key), None)
+    return counts

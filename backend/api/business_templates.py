@@ -438,6 +438,69 @@ def template_catalog(key):
     return list(get_template(key).get('catalog') or [])
 
 
+# Starter category trees per trade (phase 2.7): a nested mapping of
+# category -> subcategories (dict) or leaf names (list). Shops think
+# «نوشیدنی‌ها ← نوشابه گازدار ← کوکاکولا» (group, kind, brand); other
+# trades get their own shape. Service trades keep it empty — their
+# catalog is services, and categories can still be added by hand.
+CATEGORY_TREES = {
+    'retail': {
+        'نوشیدنی‌ها': {
+            'نوشابه گازدار': ['کوکاکولا', 'پپسی', 'فانتا'],
+            'آبمیوه': [],
+            'دوغ': [],
+            'آب معدنی': [],
+            'نوشیدنی انرژی‌زا': [],
+        },
+        'لبنیات': ['شیر', 'ماست', 'پنیر', 'کره'],
+        'تنقلات': ['چیپس و پفک', 'بیسکویت و ویفر', 'شکلات و آبنبات'],
+        'مواد غذایی': ['برنج', 'روغن', 'کنسرو و کمپوت'],
+        'شوینده و بهداشتی': ['شویندهٔ لباس', 'بهداشت شخصی'],
+    },
+    'gas_station': {
+        'سوخت': ['بنزین', 'گازوئیل', 'گاز مایع و CNG'],
+        'روغن و روانکار': {
+            'روغن موتور': ['ایرانول', 'بهران'],
+            'روغن ترمز': [],
+            'ضدیخ': [],
+        },
+        'لوازم جانبی خودرو': [],
+    },
+    'restaurant': {
+        'غذای اصلی': ['کباب‌ها', 'خورشت‌ها', 'پلو و چلو'],
+        'پیش‌غذا و مخلفات': ['سوپ', 'سالاد'],
+        'نوشیدنی‌ها': ['نوشابه', 'دوغ', 'چای و دمنوش'],
+        'دسر': [],
+    },
+    'cafe': {
+        'نوشیدنی گرم': ['قهوه', 'چای و دمنوش'],
+        'نوشیدنی سرد': ['آیس‌کافی', 'آبمیوهٔ طبیعی', 'شیک'],
+        'کیک و دسر': [],
+    },
+    'trade': {
+        'مواد غذایی اساسی': ['برنج', 'روغن', 'قند و شکر'],
+        'نوشیدنی‌ها': {
+            'نوشابه گازدار': ['کوکاکولا', 'پپسی'],
+            'آبمیوه': [],
+        },
+        'شوینده و بهداشتی': [],
+    },
+    'manufacturing': {
+        'مواد اولیه': [],
+        'محصول نهایی': [],
+        'مواد بسته‌بندی': [],
+    },
+    'general': {
+        'کالاها': [],
+        'سایر': [],
+    },
+}
+
+
+def template_category_tree(key):
+    return CATEGORY_TREES.get(key) or {}
+
+
 def templates_payload():
     """Serializable registry for the API (templates endpoint)."""
     return [

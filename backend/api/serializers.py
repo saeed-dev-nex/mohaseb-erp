@@ -11,7 +11,7 @@ from .models import (
     BusinessProfile, ExpenseCategory, Expense, Staff, VehicleType, BackupConfig,
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess,
     Business, FiscalYear, BusinessMembership,
-    Product, Warehouse, StockMovement, PurchaseInvoice, PurchaseLine,
+    Product, ProductCategory, Warehouse, StockMovement, PurchaseInvoice, PurchaseLine,
     InventorySettings, StockTransfer, StockTransferLine, StockCount, StockCountLine,
     EmploymentProfile, PayrollPeriod, PayrollSettings, Payslip,
     TaxSettings, MoadianSubmission, FixedAsset, DepreciationRun, DepreciationLine,
@@ -1127,9 +1127,67 @@ class WarehouseSerializer(serializers.ModelSerializer):
         read_only_fields = ['business', 'created_at']
 
 
+class ProductCategorySerializer(serializers.ModelSerializer):
+    children_count = serializers.SerializerMethodField()
+    products_count = serializers.SerializerMethodField()
+    path = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductCategory
+        fields = [
+            'id', 'business', 'name', 'parent', 'path',
+            'children_count', 'products_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'created_at', 'updated_at']
+
+    def get_children_count(self, obj):
+        return obj.children.count()
+
+    def get_products_count(self, obj):
+        return obj.products.count()
+
+    def get_path(self, obj):
+        return obj.path
+
+    def validate(self, attrs):
+        # The parent must live in the same business, must not be the
+        # node itself or one of its descendants (no cycles), and the
+        # name must be unique among siblings.
+        business = self.context.get('business')
+        parent = attrs.get('parent', getattr(self.instance, 'parent', None))
+        name = attrs.get('name', getattr(self.instance, 'name', None))
+        if parent is not None:
+            if business is not None and parent.business_id != business.id:
+                raise serializers.ValidationError(
+                    {'parent': 'دستهٔ والد باید از همین کسب‌وکار باشد.'}
+                )
+            node = parent
+            seen = set()
+            while node is not None and node.pk not in seen:
+                seen.add(node.pk)
+                if self.instance is not None and node.pk == self.instance.pk:
+                    raise serializers.ValidationError(
+                        {'parent': 'دسته نمی‌تواند زیرمجموعهٔ خودش یا زیردسته‌هایش باشد.'}
+                    )
+                node = node.parent
+        if business is not None and name:
+            siblings = ProductCategory.objects.filter(
+                business=business, parent=parent, name=name,
+            )
+            if self.instance is not None:
+                siblings = siblings.exclude(pk=self.instance.pk)
+            if siblings.exists():
+                raise serializers.ValidationError(
+                    {'name': 'دسته‌ای با این نام در همین سطح وجود دارد.'}
+                )
+        return attrs
+
+
 class ProductSerializer(serializers.ModelSerializer):
     current_stock = serializers.SerializerMethodField()
     stock_value = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    category_path = serializers.SerializerMethodField()
     # Empty code = «کد خودکار»: the viewset assigns the next sequential
     # numeric code of the business (see ProductViewSet.perform_create).
     code = serializers.CharField(required=False, allow_blank=True, default='')
@@ -1138,12 +1196,19 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'business', 'code', 'name', 'unit', 'barcode',
-            'average_cost', 'sale_price', 'is_active',
+            'average_cost', 'sale_price', 'is_active', 'category',
+            'category_name', 'category_path',
             'min_stock', 'reorder_point', 'max_stock',
             'secondary_unit', 'secondary_factor', 'shelf_location',
             'current_stock', 'stock_value', 'created_at', 'updated_at',
         ]
         read_only_fields = ['business', 'average_cost', 'created_at', 'updated_at']
+
+    def get_category_name(self, obj):
+        return obj.category.name if obj.category_id else ''
+
+    def get_category_path(self, obj):
+        return obj.category.path if obj.category_id else ''
 
     def get_current_stock(self, obj):
         annotated = getattr(obj, 'stock_qty', None)

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { formatMoney } from "../lib/money";
 import { inventoryAPI } from "../services/api";
-import type { CatalogProfile, Product } from "../services/api";
+import type { CatalogProfile, Product, ProductCategory } from "../services/api";
 import PriceInput from "./PriceInput";
+import { CategoryManager, flattenCategories } from "./CategoryManager";
 import { Button, ConfirmDialog, ErrorNotice, Modal, Spinner } from "./ui";
 import { formatApiError } from "../utils/apiError";
 
@@ -48,6 +49,7 @@ type ProductForm = {
   sale_price: number;
   shelf_location: string;
   reorder_point: number;
+  category: number | null;
   is_active: boolean;
 };
 
@@ -69,8 +71,12 @@ const ProductsCatalog = ({
     sale_price: 0,
     shelf_location: "",
     reorder_point: 0,
+    category: null,
     is_active: true,
   });
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
+  const [managerOpen, setManagerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -80,13 +86,19 @@ const ProductsCatalog = ({
 
   const reload = useCallback(async () => {
     try {
-      const res = await inventoryAPI.products();
+      const [res, cats] = await Promise.all([
+        inventoryAPI.products(
+          categoryFilter ? { category: categoryFilter } : undefined,
+        ),
+        inventoryAPI.categories().catch(() => null),
+      ]);
       setProducts(res.data);
+      if (cats) setCategories(cats.data);
       setLoadError("");
     } catch (e) {
       setLoadError(formatApiError(e, "دریافت کالاها انجام نشد."));
     }
-  }, []);
+  }, [categoryFilter]);
 
   useEffect(() => {
     reload();
@@ -103,6 +115,7 @@ const ProductsCatalog = ({
       sale_price: 0,
       shelf_location: "",
       reorder_point: 0,
+      category: categoryFilter,
       is_active: true,
     });
     setFormError("");
@@ -119,6 +132,7 @@ const ProductsCatalog = ({
       sale_price: Number(p.sale_price) || 0,
       shelf_location: p.shelf_location || "",
       reorder_point: Number(p.reorder_point) || 0,
+      category: p.category ?? null,
       is_active: p.is_active,
     });
     setFormError("");
@@ -139,6 +153,7 @@ const ProductsCatalog = ({
         sale_price: form.sale_price,
         shelf_location: form.shelf_location.trim(),
         reorder_point: form.reorder_point,
+        category: form.category,
         is_active: form.is_active,
       };
       if (form.id) {
@@ -171,7 +186,7 @@ const ProductsCatalog = ({
     }
   };
 
-  const set = (k: keyof ProductForm, v: string | number | boolean) =>
+  const set = (k: keyof ProductForm, v: string | number | boolean | null) =>
     setForm((f) => ({ ...f, [k]: v }));
 
   return (
@@ -183,13 +198,47 @@ const ProductsCatalog = ({
             مدیریت {itemLabel}؛ موجودی از خریدها و گردش انبار به‌روز می‌شود
           </p>
         </div>
-        <button
-          onClick={openAdd}
-          className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 px-5 py-2.5 text-sm"
-        >
-          {`+ افزودن ${itemLabel}`}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setManagerOpen(true)}
+            className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] bg-slate-700/60 hover:bg-slate-700 text-slate-100 border border-slate-600/50 px-4 py-2.5 text-sm"
+          >
+            🏷️ دسته‌بندی‌ها
+          </button>
+          <button
+            onClick={openAdd}
+            className="inline-flex items-center justify-center gap-2 font-medium rounded-xl transition-all duration-200 active:scale-[0.98] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 px-5 py-2.5 text-sm"
+          >
+            {`+ افزودن ${itemLabel}`}
+          </button>
+        </div>
       </div>
+
+      {categories.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-slate-400">فیلتر دسته‌بندی:</span>
+          <select
+            className="bg-slate-700/50 border border-slate-600/50 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            value={categoryFilter ?? ""}
+            onChange={(e) =>
+              setCategoryFilter(e.target.value ? Number(e.target.value) : null)
+            }
+          >
+            <option value="">همهٔ کالاها</option>
+            {flattenCategories(categories).map((c) => (
+              <option key={c.id} value={c.id}>
+                {" ".repeat(c.depth)}
+                {c.path}
+              </option>
+            ))}
+          </select>
+          {categoryFilter && (
+            <span className="text-[11px] text-slate-500">
+              زیردسته‌ها و برندهای این دسته هم نمایش داده می‌شوند.
+            </span>
+          )}
+        </div>
+      )}
 
       {loadError && (
         <div>
@@ -247,6 +296,11 @@ const ProductsCatalog = ({
                   </td>
                   <td className="py-2.5 px-3 text-white font-medium">
                     {p.name}
+                    {p.category_path && (
+                      <span className="mt-0.5 block text-[11px] font-normal text-sky-300/80">
+                        🏷️ {p.category_path}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2.5 px-3 text-slate-300">{p.unit}</td>
                   <td className="py-2.5 px-3 text-slate-200">
@@ -334,6 +388,31 @@ const ProductsCatalog = ({
                 onChange={(e) => set("name", e.target.value)}
                 placeholder={`نام ${itemLabel}`}
               />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-slate-400">دسته‌بندی</label>
+              <select
+                className={inp}
+                value={form.category ?? ""}
+                onChange={(e) =>
+                  set(
+                    "category",
+                    e.target.value ? Number(e.target.value) : null,
+                  )
+                }
+              >
+                <option value="">بدون دسته‌بندی</option>
+                {flattenCategories(categories).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {" ".repeat(c.depth)}
+                    {c.path}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500">
+                دستهٔ کلی، زیردسته یا برند را انتخاب کنید؛ از دکمهٔ
+                «دسته‌بندی‌ها» می‌توانید درخت دسته‌ها را بسازید و ویرایش کنید.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -430,6 +509,13 @@ const ProductsCatalog = ({
         loading={deleting}
       />
       {deleteError && <ErrorNotice message={deleteError} />}
+
+      <CategoryManager
+        open={managerOpen}
+        onClose={() => setManagerOpen(false)}
+        categories={categories}
+        onChanged={reload}
+      />
     </div>
   );
 };
