@@ -371,6 +371,7 @@ export interface InvoiceProfile {
 export interface RolePreset {
   key: string;
   label: string;
+  description?: string;
   modules: string[] | null;
 }
 
@@ -448,6 +449,8 @@ export const businessesAPI = {
   members: (businessId: number) => api.get(`businesses/${businessId}/members/`),
   addMember: (businessId: number, data: { username: string; role: string }) =>
     api.post(`businesses/${businessId}/members/`, data),
+  removeMember: (businessId: number, userId: number) =>
+    api.delete(`businesses/${businessId}/members/${userId}/`),
 };
 
 export const databaseConfigAPI = {

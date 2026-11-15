@@ -193,3 +193,25 @@ class BusinessViewSet(viewsets.ModelViewSet):
             BusinessMembershipSerializer(membership).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(
+        detail=True, methods=['delete'],
+        url_path=r'members/(?P<user_id>[^/.]+)',
+    )
+    def remove_member(self, request, pk=None, user_id=None):
+        """Remove a user's membership from this business.
+
+        Managers/owners only. The owner's own membership is protected:
+        a business must always keep its owner.
+        """
+        business = self.get_object()
+        self._require_manage(business)
+        membership = BusinessMembership.objects.filter(
+            business=business, user_id=user_id,
+        ).first()
+        if membership is None:
+            raise ValidationError('این کاربر عضو این کسب‌وکار نیست.')
+        if membership.role == 'owner':
+            raise ValidationError('عضویت مالک کسب‌وکار قابل حذف نیست.')
+        membership.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

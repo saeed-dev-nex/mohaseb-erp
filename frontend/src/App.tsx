@@ -9,6 +9,7 @@ import {
 } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { hasModule } from "./utils/modules";
+import { useBusiness } from "./lib/business";
 import { setupAPI } from "./services/api";
 import type { ModuleName } from "./utils/modules";
 const Login = lazy(() => import("./pages/Login"));
@@ -55,6 +56,16 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
     (state: any) => state.auth.isAuthenticated,
   );
   return isAuthenticated ? children : <Navigate to="/login" replace />;
+};
+
+// The users page serves two audiences: the superuser (system
+// accounts) and the current business's owner/manager (its members).
+const UsersRoute = ({ children }: { children: ReactNode }) => {
+  const currentUser = useSelector((state: any) => state.auth.currentUser);
+  const { current, loading } = useBusiness();
+  if (currentUser?.is_superuser) return <>{children}</>;
+  if (loading) return null;
+  return current?.my_role ? <>{children}</> : <Navigate to="/" replace />;
 };
 
 // Stage 6: route-level module gate mirroring the backend's per-module
@@ -287,13 +298,13 @@ function App() {
                 }
               />
 
-              {/* Users (admin only) */}
+              {/* Users: superuser + business members (redesigned page) */}
               <Route
                 path="users"
                 element={
-                  <ModuleRoute module="users">
+                  <UsersRoute>
                     <UsersPage />
-                  </ModuleRoute>
+                  </UsersRoute>
                 }
               />
               <Route

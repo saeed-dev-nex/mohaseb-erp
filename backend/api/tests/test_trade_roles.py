@@ -189,3 +189,41 @@ class CurrencyUnitTests(TestCase):
             '/api/profile/update_profile/', {'currency_unit': 'rial'}, format='multipart')
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.data['currency_unit'], 'rial')
+
+
+class MemberManagementTests(TradeRolesBase):
+    """The users page manages members: presets carry descriptions and
+    a membership can be removed (except the owner's)."""
+
+    def test_presets_carry_descriptions(self):
+        response = self.client.get('/api/businesses/')
+        mine = [b for b in response.data if b['id'] == self.shop.id][0]
+        for preset in mine['role_presets']:
+            self.assertTrue(preset.get('description'), preset['key'])
+
+    def test_manager_can_remove_a_member(self):
+        seller = self.add_member('seller-rm', 'seller')
+        manager = self.add_member('manager-rm', 'manager')
+        self.client.force_authenticate(manager)
+        response = self.client.delete(
+            f'/api/businesses/{self.shop.id}/members/{seller.id}/')
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(BusinessMembership.objects.filter(
+            user=seller, business=self.shop).exists())
+
+    def test_owner_membership_cannot_be_removed(self):
+        owner_membership = BusinessMembership.objects.get(
+            business=self.shop, role='owner')
+        response = self.client.delete(
+            f'/api/businesses/{self.shop.id}/members/{owner_membership.user.id}/')
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(BusinessMembership.objects.filter(
+            id=owner_membership.id).exists())
+
+    def test_functional_role_cannot_remove_members(self):
+        seller = self.add_member('seller-noperm', 'seller')
+        other = self.add_member('seller-target', 'seller')
+        self.client.force_authenticate(seller)
+        response = self.client.delete(
+            f'/api/businesses/{self.shop.id}/members/{other.id}/')
+        self.assertEqual(response.status_code, 403)
