@@ -169,7 +169,7 @@ class TemplateDepthTests(TestCase):
         self.assertFalse(by_key['restaurant']['invoice_profile']['vehicle'])
 
     def test_create_gas_station_business_seeds_fuel_catalog(self):
-        from ..models import Service
+        from ..models import Product, Service
 
         response = self.client.post(
             '/api/businesses/',
@@ -178,10 +178,44 @@ class TemplateDepthTests(TestCase):
         )
         self.assertEqual(response.status_code, 201, response.content)
         business = Business.objects.get(name='جایگاه تست')
-        titles = set(Service.objects.filter(business=business).values_list('title', flat=True))
-        self.assertIn('بنزین سوپر', titles)
-        self.assertEqual(len(titles), 6)
+        # Fuel is a stocked product (liters in the tank), so the starter
+        # catalog seeds Products — not Service rows.
+        names = set(Product.objects.filter(business=business).values_list('name', flat=True))
+        self.assertIn('بنزین سوپر', names)
+        self.assertEqual(len(names), 6)
+        self.assertFalse(Service.objects.filter(business=business).exists())
+        units = set(Product.objects.filter(business=business).values_list('unit', flat=True))
+        self.assertEqual(units, {'لیتر'})
         self.assertEqual(response.data['invoice_profile']['extras'][0]['key'], 'liters')
+        self.assertEqual(response.data['catalog_profile']['kind'], 'product')
+
+    def test_retail_business_seeds_products_and_reports_catalog_profile(self):
+        from ..models import Product, Service
+
+        response = self.client.post(
+            '/api/businesses/',
+            {'name': 'فروشگاه تست', 'template_key': 'retail', 'person_type': 'legal'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        business = Business.objects.get(name='فروشگاه تست')
+        self.assertEqual(Product.objects.filter(business=business).count(), 5)
+        self.assertFalse(Service.objects.filter(business=business).exists())
+        codes = list(Product.objects.filter(business=business).values_list('code', flat=True))
+        self.assertEqual(len(set(codes)), 5)
+        self.assertEqual(response.data['catalog_profile']['kind'], 'product')
+        self.assertEqual(response.data['catalog_profile']['default_unit'], 'عدد')
+
+    def test_service_templates_report_service_catalog_profile(self):
+        response = self.client.get('/api/business-templates/')
+        by_key = {item['key']: item for item in response.data}
+        self.assertEqual(by_key['retail']['catalog_profile']['kind'], 'product')
+        self.assertEqual(by_key['restaurant']['catalog_profile']['kind'], 'service')
+        self.assertFalse(by_key['restaurant']['catalog_profile']['commission'])
+        self.assertTrue(by_key['services_repair']['catalog_profile']['commission'])
+        self.assertTrue(by_key['services_repair']['catalog_profile']['extra_service'])
+        self.assertTrue(by_key['beauty_salon']['catalog_profile']['commission'])
+        self.assertFalse(by_key['beauty_salon']['catalog_profile']['extra_service'])
 
     def test_apply_catalog_is_idempotent(self):
         business = Business.objects.create(name='رستوران تست', template_key='restaurant')
