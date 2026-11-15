@@ -12,6 +12,7 @@ from .models import (
     Cheque, InvoiceSettings, ChatMessage, SocialNetwork, UserModuleAccess,
     Business, FiscalYear, BusinessMembership,
     Product, Warehouse, StockMovement, PurchaseInvoice, PurchaseLine,
+    InventorySettings, StockTransfer, StockTransferLine, StockCount, StockCountLine,
     EmploymentProfile, PayrollPeriod, PayrollSettings, Payslip,
     TaxSettings, MoadianSubmission, FixedAsset, DepreciationRun, DepreciationLine,
 )
@@ -1109,6 +1110,8 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'business', 'code', 'name', 'unit', 'barcode',
             'average_cost', 'sale_price', 'is_active',
+            'min_stock', 'reorder_point', 'max_stock',
+            'secondary_unit', 'secondary_factor', 'shelf_location',
             'current_stock', 'stock_value', 'created_at', 'updated_at',
         ]
         read_only_fields = ['business', 'average_cost', 'created_at', 'updated_at']
@@ -1133,7 +1136,8 @@ class StockMovementSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'business', 'product', 'product_name', 'product_code',
             'warehouse', 'kind', 'kind_display', 'quantity', 'signed_quantity',
-            'unit_cost', 'source_type', 'source_id', 'date', 'note', 'created_at',
+            'unit_cost', 'batch_no', 'expiry_date',
+            'source_type', 'source_id', 'date', 'note', 'created_at',
         ]
         read_only_fields = fields
 
@@ -1148,7 +1152,11 @@ class PurchaseLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PurchaseLine
-        fields = ['id', 'product', 'product_name', 'product_code', 'quantity', 'unit_price', 'total']
+        fields = [
+            'id', 'product', 'product_name', 'product_code', 'quantity',
+            'unit_price', 'total', 'batch_no', 'expiry_date', 'landed_unit_cost',
+        ]
+        read_only_fields = ['landed_unit_cost']
 
     def get_total(self, obj):
         return obj.total
@@ -1157,6 +1165,7 @@ class PurchaseLineSerializer(serializers.ModelSerializer):
 class PurchaseInvoiceSerializer(serializers.ModelSerializer):
     lines = PurchaseLineSerializer(many=True)
     total = serializers.SerializerMethodField()
+    grand_total = serializers.SerializerMethodField()
     supplier_name = serializers.CharField(source='supplier.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
@@ -1165,13 +1174,18 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'business', 'fiscal_year', 'supplier', 'supplier_name',
             'number', 'date', 'description', 'status', 'status_display',
-            'vat_amount', 'journal_entry', 'lines', 'total', 'created_at', 'updated_at',
+            'warehouse', 'extra_costs',
+            'vat_amount', 'journal_entry', 'lines', 'total', 'grand_total',
+            'created_at', 'updated_at',
         ]
         read_only_fields = ['business', 'number', 'status', 'journal_entry', 'created_at', 'updated_at']
         extra_kwargs = {'fiscal_year': {'required': False}}
 
     def get_total(self, obj):
         return obj.total
+
+    def get_grand_total(self, obj):
+        return obj.grand_total
 
     def validate_lines(self, lines):
         if not lines:
@@ -1205,6 +1219,97 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
 # Mohaseb ERP — personnel & payroll (phase 3)
 # ---------------------------------------------------------------------------
 
+
+
+class InventorySettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InventorySettings
+        fields = ['id', 'business', 'block_negative_stock']
+        read_only_fields = ['business']
+
+
+class StockTransferLineSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_code = serializers.CharField(source='product.code', read_only=True)
+
+    class Meta:
+        model = StockTransferLine
+        fields = ['id', 'product', 'product_name', 'product_code', 'quantity']
+
+
+class StockTransferSerializer(serializers.ModelSerializer):
+    lines = StockTransferLineSerializer(many=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    from_warehouse_name = serializers.CharField(source='from_warehouse.name', read_only=True)
+    to_warehouse_name = serializers.CharField(source='to_warehouse.name', read_only=True)
+
+    class Meta:
+        model = StockTransfer
+        fields = [
+            'id', 'business', 'fiscal_year', 'number', 'date',
+            'from_warehouse', 'from_warehouse_name',
+            'to_warehouse', 'to_warehouse_name',
+            'status', 'status_display', 'description', 'lines',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'number', 'status', 'created_at', 'updated_at']
+        extra_kwargs = {'fiscal_year': {'required': False}}
+
+    def validate_lines(self, lines):
+        if not lines:
+            raise serializers.ValidationError('حواله باید دست‌کم یک سطر داشته باشد.')
+        return lines
+
+    def create(self, validated_data):
+        lines = validated_data.pop('lines', [])
+        transfer = StockTransfer.objects.create(**validated_data)
+        for line in lines:
+            StockTransferLine.objects.create(transfer=transfer, **line)
+        return transfer
+
+    def update(self, instance, validated_data):
+        lines = validated_data.pop('lines', None)
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.save()
+        if lines is not None:
+            instance.lines.all().delete()
+            for line in lines:
+                StockTransferLine.objects.create(transfer=instance, **line)
+        return instance
+
+
+class StockCountLineSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    product_code = serializers.CharField(source='product.code', read_only=True)
+    variance = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StockCountLine
+        fields = [
+            'id', 'product', 'product_name', 'product_code',
+            'system_qty', 'counted_qty', 'variance',
+        ]
+        read_only_fields = ['system_qty']
+
+    def get_variance(self, obj):
+        return obj.variance
+
+
+class StockCountSerializer(serializers.ModelSerializer):
+    lines = StockCountLineSerializer(many=True, read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    warehouse_name = serializers.CharField(source='warehouse.name', read_only=True)
+
+    class Meta:
+        model = StockCount
+        fields = [
+            'id', 'business', 'fiscal_year', 'number', 'date', 'warehouse',
+            'warehouse_name', 'status', 'status_display', 'note', 'lines',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['business', 'number', 'status', 'created_at', 'updated_at']
+        extra_kwargs = {'fiscal_year': {'required': False}}
 
 
 class PayrollSettingsSerializer(serializers.ModelSerializer):

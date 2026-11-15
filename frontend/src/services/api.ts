@@ -623,6 +623,12 @@ export interface Product {
   average_cost: number;
   sale_price: number;
   is_active: boolean;
+  min_stock: number;
+  reorder_point: number;
+  max_stock: number;
+  secondary_unit: string;
+  secondary_factor: number;
+  shelf_location: string;
   current_stock: number;
   stock_value: number;
 }
@@ -635,6 +641,9 @@ export interface PurchaseLine {
   quantity: number;
   unit_price: number;
   total?: number;
+  batch_no?: string;
+  expiry_date?: string | null;
+  landed_unit_cost?: number;
 }
 
 export interface PurchaseInvoice {
@@ -648,14 +657,105 @@ export interface PurchaseInvoice {
   description: string;
   status: "draft" | "posted";
   status_display: string;
+  warehouse: number | null;
+  extra_costs: number;
   vat_amount: number;
   journal_entry: number | null;
   lines: PurchaseLine[];
   total: number;
+  grand_total: number;
+}
+
+export interface StockTransferLine {
+  id?: number;
+  product: number;
+  product_name?: string;
+  product_code?: string;
+  quantity: number;
+}
+
+export interface StockTransfer {
+  id: number;
+  business: number;
+  fiscal_year: number;
+  number: number;
+  date: string;
+  from_warehouse: number;
+  from_warehouse_name: string;
+  to_warehouse: number;
+  to_warehouse_name: string;
+  status: "draft" | "posted";
+  status_display: string;
+  description: string;
+  lines: StockTransferLine[];
+}
+
+export interface StockCountLine {
+  id: number;
+  product: number;
+  product_name: string;
+  product_code: string;
+  system_qty: number;
+  counted_qty: number | null;
+  variance: number | null;
+}
+
+export interface StockCount {
+  id: number;
+  business: number;
+  fiscal_year: number;
+  number: number;
+  date: string;
+  warehouse: number;
+  warehouse_name: string;
+  status: "draft" | "applied";
+  status_display: string;
+  note: string;
+  lines: StockCountLine[];
+  adjusted_lines?: number;
+}
+
+export interface InventoryAlerts {
+  low_stock: {
+    product: number;
+    code: string;
+    name: string;
+    unit: string;
+    current_stock: number;
+    reorder_point: number;
+    min_stock: number;
+    max_stock: number;
+    suggested_qty: number;
+  }[];
+  expiring: {
+    product: number;
+    code: string;
+    name: string;
+    batch_no: string;
+    expiry_date: string;
+    quantity_in: number;
+    expired: boolean;
+  }[];
+  dead_stock: {
+    product: number;
+    code: string;
+    name: string;
+    unit: string;
+    current_stock: number;
+    stock_value: number;
+  }[];
+}
+
+export interface InventorySettings {
+  id: number;
+  business: number;
+  block_negative_stock: boolean;
 }
 
 export const inventoryAPI = {
   warehouses: () => api.get<Warehouse[]>("warehouses/"),
+  createWarehouse: (data: Partial<Warehouse>) =>
+    api.post<Warehouse>("warehouses/", data),
   products: () => api.get<Product[]>("products/"),
   createProduct: (data: Partial<Product>) =>
     api.post<Product>("products/", data),
@@ -672,9 +772,35 @@ export const inventoryAPI = {
     api.post<PurchaseInvoice>(`purchases/${id}/post/`, {}),
   unpostPurchase: (id: number) =>
     api.post<PurchaseInvoice>(`purchases/${id}/unpost/`, {}),
-  kardex: (product: number) =>
-    api.get("inventory/kardex/", { params: { product } }),
+  kardex: (product: number, warehouse?: number) =>
+    api.get("inventory/kardex/", {
+      params: warehouse ? { product, warehouse } : { product },
+    }),
   adjust: (data: Payload) => api.post("inventory/adjust/", data),
+  transfers: () => api.get<StockTransfer[]>("stock-transfers/"),
+  createTransfer: (data: Payload) =>
+    api.post<StockTransfer>("stock-transfers/", data),
+  updateTransfer: (id: number, data: Payload) =>
+    api.put<StockTransfer>(`stock-transfers/${id}/`, data),
+  deleteTransfer: (id: number) => api.delete(`stock-transfers/${id}/`),
+  postTransfer: (id: number) =>
+    api.post<StockTransfer>(`stock-transfers/${id}/post/`, {}),
+  unpostTransfer: (id: number) =>
+    api.post<StockTransfer>(`stock-transfers/${id}/unpost/`, {}),
+  stockCounts: () => api.get<StockCount[]>("stock-counts/"),
+  createStockCount: (data: Payload) =>
+    api.post<StockCount>("stock-counts/", data),
+  deleteStockCount: (id: number) => api.delete(`stock-counts/${id}/`),
+  saveStockCountLines: (
+    id: number,
+    lines: { id: number; counted_qty: number | null }[],
+  ) => api.put<StockCount>(`stock-counts/${id}/lines/`, { lines }),
+  applyStockCount: (id: number) =>
+    api.post<StockCount>(`stock-counts/${id}/apply/`, {}),
+  alerts: () => api.get<InventoryAlerts>("inventory/alerts/"),
+  inventorySettings: () => api.get<InventorySettings>("inventory/settings/"),
+  updateInventorySettings: (data: Partial<InventorySettings>) =>
+    api.put<InventorySettings>("inventory/settings/", data),
 };
 
 // ---- Personnel & payroll (ERP phase 3) ----

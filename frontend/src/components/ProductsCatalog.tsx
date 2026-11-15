@@ -45,6 +45,8 @@ type ProductForm = {
   barcode: string;
   unit: string;
   sale_price: number;
+  shelf_location: string;
+  reorder_point: number;
   is_active: boolean;
 };
 
@@ -64,6 +66,8 @@ const ProductsCatalog = ({
     barcode: "",
     unit: profile.default_unit || "عدد",
     sale_price: 0,
+    shelf_location: "",
+    reorder_point: 0,
     is_active: true,
   });
   const [saving, setSaving] = useState(false);
@@ -96,6 +100,8 @@ const ProductsCatalog = ({
       barcode: "",
       unit: profile.default_unit || "عدد",
       sale_price: 0,
+      shelf_location: "",
+      reorder_point: 0,
       is_active: true,
     });
     setFormError("");
@@ -110,6 +116,8 @@ const ProductsCatalog = ({
       barcode: p.barcode || "",
       unit: p.unit,
       sale_price: Number(p.sale_price) || 0,
+      shelf_location: p.shelf_location || "",
+      reorder_point: Number(p.reorder_point) || 0,
       is_active: p.is_active,
     });
     setFormError("");
@@ -128,6 +136,8 @@ const ProductsCatalog = ({
         barcode: form.barcode.trim(),
         unit: form.unit.trim() || profile.default_unit || "عدد",
         sale_price: form.sale_price,
+        shelf_location: form.shelf_location.trim(),
+        reorder_point: form.reorder_point,
         is_active: form.is_active,
       };
       if (form.id) {
@@ -346,6 +356,31 @@ const ProductsCatalog = ({
                 <PriceInput
                   value={form.sale_price}
                   onChange={(v) => set("sale_price", v)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">
+                  مکان در انبار (قفسه)
+                </label>
+                <input
+                  className={inp}
+                  value={form.shelf_location}
+                  onChange={(e) => set("shelf_location", e.target.value)}
+                  placeholder="مثلاً راهرو ۲، قفسه ۵"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-slate-400">
+                  نقطه سفارش (هشدار اتمام موجودی)
+                </label>
+                <input
+                  className={inp}
+                  type="number"
+                  min={0}
+                  value={form.reorder_point || ""}
+                  onChange={(e) =>
+                    set("reorder_point", Number(e.target.value) || 0)
+                  }
                 />
               </div>
             </div>
