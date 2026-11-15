@@ -42,11 +42,30 @@ CHANGELOG_V2 = """# تغییرات
 
 
 class ChangelogParsingTests(SimpleTestCase):
-    def test_changes_since_returns_newer_sections_only(self):
+    def test_changes_since_returns_only_the_latest_update(self):
+        # The update page shows ONE update's notes: the newest
+        # section newer than the installed version — never the
+        # whole history.
         changes = app_update.changes_since(CHANGELOG_V2, '3.5.0')
         versions = [section['version'] for section in changes]
-        self.assertEqual(versions, ['Unreleased', '3.6.0'])
-        items = changes[1]['items']
+        self.assertEqual(versions, ['Unreleased'])
+        self.assertEqual(changes[0]['items'], ['یک تغییر در راه'])
+
+    def test_changes_since_skips_empty_unreleased(self):
+        v1_changes = app_update.changes_since(CHANGELOG_V1, '3.4.0')
+        self.assertEqual([s['version'] for s in v1_changes], ['3.5.0'])
+        self.assertEqual(v1_changes[0]['items'], ['قابلیت موجود'])
+
+    def test_changes_items_fold_continuations_and_strip_emphasis(self):
+        changelog = (
+            "# تغییرات\n\n## [Unreleased]\n\n## [3.6.0] - 2026-11-10\n\n"
+            "- **قابلیت مهم:** اعلان بلادرنگ درخواست ویرایش\n"
+            "  که ادامهٔ همان خط است\n"
+            "- پروفایل عملکرد کاربران\n"
+        )
+        changes = app_update.changes_since(changelog, '3.5.0')
+        self.assertEqual([s['version'] for s in changes], ['3.6.0'])
+        items = changes[0]['items']
         self.assertEqual(len(items), 2)
         self.assertNotIn('**', items[0])
         self.assertIn('ادامهٔ همان خط', items[0])
@@ -105,7 +124,7 @@ class GitUpdateStatusTests(TestCase):
         self.assertEqual(status['latest_version'], '3.6.0')
         self.assertEqual(status['behind'], 1)
         versions = [section['version'] for section in status['changes']]
-        self.assertIn('3.6.0', versions)
+        self.assertEqual(versions, ['Unreleased'])
 
     def test_approve_writes_the_flag(self):
         ok, detail = app_update.approve_update(requested_by='admin')
@@ -129,6 +148,9 @@ class UpdateStatusFailureTests(SimpleTestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         base = Path(self.tmp.name)
+        # A git checkout whose git binary is unreachable (not the
+        # docker case, which is detected by the missing .git).
+        (base / '.git').mkdir()
         self.cache = base / 'cache.json'
         for target, value in (
             ('repo_root', base),
@@ -266,3 +288,54 @@ class AppUpdateApiTests(TestCase):
         response = self.client.get('/api/app-update/?quick=1')
         self.assertEqual(response.status_code, 200, response.content)
         self.assertIn('current_version', response.data)
+
+
+class StaleCacheAfterUpdateTests(GitUpdateStatusTests):
+    """Regression: after an update was applied, the pre-update cache
+    kept announcing that same update (the banner appeared AFTER
+    updating). A cache whose HEAD has moved is stale and must not
+    be served."""
+
+    def test_quick_status_goes_quiet_once_head_moves(self):
+        cache_file = Path(self.tmp.name) / 'status-cache.json'
+        with patch.object(app_update, '_cache_path', return_value=cache_file):
+            status = app_update.get_update_status(force=True)
+            self.assertEqual(status['behind'], 1)
+            quick = app_update.quick_update_status()
+            self.assertEqual(quick['behind'], 1)
+            # The update lands: HEAD fast-forwards to the remote.
+            _git(self.install, 'reset', '--hard', 'origin/beta')
+            quick = app_update.quick_update_status()
+            self.assertFalse(quick['available'])
+            self.assertEqual(quick['behind'], 0)
+            fresh = app_update.get_update_status()
+            self.assertEqual(fresh['behind'], 0)
+
+
+class DockerInstallUpdateTests(SimpleTestCase):
+    """A container install has no git checkout: the status must say
+    so plainly (host-side script), never fail or pretend."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name)
+        (base / 'VERSION').write_text('0.1.0\n', encoding='utf-8')
+        for target, value in (
+            ('repo_root', base),
+            ('_cache_path', base / 'cache.json'),
+        ):
+            patcher = patch.object(app_update, target, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_status_reports_docker_environment(self):
+        status = app_update.get_update_status(force=True)
+        self.assertEqual(status['environment'], 'docker')
+        self.assertFalse(status['available'])
+        self.assertIn('داکر', status['reason'])
+
+    def test_approve_is_refused_with_guidance(self):
+        ok, detail = app_update.approve_update(requested_by='admin')
+        self.assertFalse(ok)
+        self.assertIn('داکر', detail['detail'])

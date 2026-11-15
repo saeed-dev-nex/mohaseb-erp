@@ -6,6 +6,7 @@ import { F, inp, Section } from "./shared";
 type UpdateStatus = {
   available: boolean;
   reason: string;
+  environment?: string;
   current_version: string;
   branch: string;
   current_sha: string;
@@ -32,6 +33,7 @@ export const UpdateTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
   const [checking, setChecking] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [applied, setApplied] = useState(false);
+  const [appliedAuto, setAppliedAuto] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -71,7 +73,8 @@ export const UpdateTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
     setError("");
     showWaiting("در حال آماده‌سازی نصب آپدیت…");
     try {
-      await appUpdateAPI.apply();
+      const { data } = await appUpdateAPI.apply();
+      setAppliedAuto(Boolean((data as any)?.spawned));
       setApplied(true);
       setConfirming(false);
     } catch (err: any) {
@@ -237,10 +240,9 @@ export const UpdateTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
       {applied && (
         <Section icon="🚀" title="آپدیت در حال اعمال است">
           <div className="rounded-xl border border-sky-500/40 bg-sky-500/10 p-4 text-sm leading-7 text-sky-300">
-            تأیید شما ثبت شد. برنامه تا چند لحظهٔ دیگر از دسترس خارج می‌شود،
-            آپدیت نصب می‌شود و با نسخهٔ جدید دوباره بالا می‌آید. اگر به هر دلیلی
-            این اتفاق نیفتاد، در شروع دستی بعدی برنامه همین آپدیتِ تأییدشده
-            اعمال می‌شود.
+            {appliedAuto
+              ? "تأیید شما ثبت شد و نصب به‌صورت خودکار در پس‌زمینه انجام می‌شود: برنامه تا چند لحظهٔ دیگر از دسترس خارج می‌شود، آپدیت نصب می‌شود و سرور خودش دوباره بالا می‌آید — نیازی به ری‌استارت دستی نیست. این صفحه را باز نگه دارید و چند دقیقهٔ دیگر آن را تازه کنید."
+              : "تأیید شما ثبت شد. برنامه در شروع بعدی، همین آپدیتِ تأییدشده را اعمال می‌کند و با نسخهٔ جدید بالا می‌آید."}
           </div>
         </Section>
       )}

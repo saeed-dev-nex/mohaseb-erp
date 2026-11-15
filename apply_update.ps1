@@ -46,6 +46,13 @@ Write-Log 'Running the updater (forced, already approved in-app).'
 & powershell -NoProfile -ExecutionPolicy Bypass -File $updater -Force *>> $logFile
 Write-Log ('Updater exit code: ' + $LASTEXITCODE)
 
+# Drop the pre-update status cache: it describes the old code and
+# would keep announcing this same update after the relaunch.
+$statusCache = Join-Path $RepoRoot 'backend\.update_status_cache.json'
+if (Test-Path -LiteralPath $statusCache) {
+    Remove-Item -LiteralPath $statusCache -Force -ErrorAction SilentlyContinue
+}
+
 $launcher = Join-Path $RepoRoot 'run_production.bat'
 if (Test-Path -LiteralPath $launcher -PathType Leaf) {
     Write-Log 'Relaunching the app.'
