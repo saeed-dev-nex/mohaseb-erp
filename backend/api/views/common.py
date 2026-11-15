@@ -72,6 +72,47 @@ class HasModuleAccess(BasePermission):
         return module in effective_modules(request.user)
 
 
+class HasBusinessModuleAccess(BasePermission):
+    """Per-trade role gate for the ERP modules (phase 2.6).
+
+    The view declares ``module_name``; the caller's membership role in
+    the resolved business decides via the trade's role presets
+    (api.business_templates.role_modules). Owners, managers and
+    superusers pass; a request without a business context passes too
+    (the view itself then answers 400, exactly as before). One
+    background dependency is exempted: roles holding «invoices» may
+    READ inventory lists (the product picker on the invoice form)
+    without holding the inventory module.
+    """
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated or not request.user.is_active:
+            return False
+        module = getattr(view, 'module_name', None)
+        if module is None or request.user.is_superuser:
+            return True
+        from ..business_context import resolve_business
+
+        business = resolve_business(request)
+        if business is None:
+            return True
+        membership = business.memberships.filter(user=request.user).first()
+        if membership is None or membership.role in ('owner', 'manager'):
+            return True
+        from ..business_templates import role_modules
+
+        modules = role_modules(business.template_key, membership.role)
+        if modules is None or module in modules:
+            return True
+        if (
+            request.method in ('GET', 'HEAD', 'OPTIONS')
+            and module == 'inventory'
+            and 'invoices' in modules
+        ):
+            return True
+        return False
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def database_revision(request):

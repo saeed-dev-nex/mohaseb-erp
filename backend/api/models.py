@@ -609,6 +609,14 @@ class BusinessProfile(models.Model):
     telegram = models.CharField(max_length=100, blank=True, verbose_name='تلگرام')
     footer_text = models.CharField(max_length=500, blank=True, verbose_name='متن پاورقی فاکتور')
     tax_id = models.CharField(max_length=50, blank=True, verbose_name='شناسه مالیاتی')
+    # Display/entry money unit. Amounts are STORED in Toman (the app's
+    # historical unit); choosing Rial makes the UI show and accept
+    # amounts ×10 with a ریال label, converting at the edges.
+    currency_unit = models.CharField(
+        max_length=8,
+        choices=[('toman', 'تومان'), ('rial', 'ریال')],
+        default='toman', verbose_name='واحد پول',
+    )
     customer_documents_path = models.CharField(max_length=500, blank=True, default='', verbose_name='مسیر ذخیره‌سازی مدارک مشتریان')
 
     class Meta:
@@ -929,6 +937,9 @@ class BusinessMembership(models.Model):
     ROLE_CHOICES = [
         ('owner', 'مالک'),
         ('manager', 'مدیر'),
+        ('accountant', 'حسابدار'),
+        ('warehouse', 'انباردار'),
+        ('seller', 'فروشنده'),
         ('operator', 'اپراتور'),
         ('viewer', 'مشاهده‌گر'),
     ]

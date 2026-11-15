@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { formatMoney } from "../lib/money";
 import { Link } from "react-router-dom";
 import { invoicesAPI } from "../services/api";
 import { hideWaiting, showWaiting } from "../lib/waiting";
@@ -6,8 +7,7 @@ import JalaliDatePicker from "../components/JalaliDatePicker";
 import { Button, StatCard } from "../components/ui";
 import { jalaliMonthStartISO, jalaliPrevMonthRangeISO } from "../utils/persian";
 
-const fmt = (n: number | string | null | undefined) =>
-  new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
+const fmt = (n: number | string | null | undefined) => formatMoney(n);
 const fmtN = (n: number | string | null | undefined) =>
   new Intl.NumberFormat("fa-IR").format(Number(n) || 0);
 
@@ -63,6 +63,8 @@ type OverdueInvoice = {
 };
 
 type ReportData = {
+  income_basis?: string;
+  total_income?: number;
   total_revenue: number;
   pending_amount: number;
   invoice_amount: number;
@@ -297,7 +299,11 @@ const Reports = () => {
           />
           <StatCard
             icon="📈"
-            label="سود خالص (کارمزد − هزینه)"
+            label={
+              report.income_basis === "sales"
+                ? "سود خالص (فروش − هزینه)"
+                : "سود خالص (کارمزد − هزینه)"
+            }
             value={fmt(report.net_profit)}
             color={Number(report.net_profit) >= 0 ? "green" : "red"}
           />

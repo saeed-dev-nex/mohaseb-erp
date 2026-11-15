@@ -78,15 +78,37 @@ class DashboardViewSet(viewsets.ViewSet):
         now = timezone.localtime()
         today = now.date()
 
-        total_customers = Customer.objects.count()
-        total_invoices = Invoice.objects.count()
-        total_revenue = Invoice.objects.filter(Q(status='paid') | Q(commission_paid=True)).aggregate(
-            total=Sum('commission_total')
-        )['total'] or 0
-        total_commission = total_revenue
-        pending_count = Invoice.objects.filter(status='pending').count()
-        paid_count = Invoice.objects.filter(status='paid').count()
-        overdue_queryset = Invoice.objects.filter(status='pending', due_date__lt=today).select_related('customer').prefetch_related('payments').order_by('due_date')
+        # ERP: when a business is selected the dashboard speaks for
+        # that business alone, and «درآمد» follows the trade — trades
+        # that earn a commission (پیشخوان، تعمیرات، آرایشگاه) count
+        # their commission; selling trades count the sale itself.
+        # Without a business context the historical commission-based,
+        # whole-database behaviour is kept.
+        from ..business_context import resolve_business
+        from ..business_templates import template_income_basis
+
+        business = resolve_business(request)
+        income_basis = (
+            template_income_basis(business.template_key) if business else 'commission'
+        )
+        invoices = Invoice.objects.all()
+        customers = Customer.objects.all()
+        if business is not None:
+            invoices = invoices.filter(business=business)
+            customers = customers.filter(business=business)
+
+        total_customers = customers.count()
+        total_invoices = invoices.count()
+        paid_q = Q(status='paid') | Q(commission_paid=True)
+        paid_invoices = list(invoices.filter(paid_q))
+        total_commission = sum(int(inv.commission_total) for inv in paid_invoices)
+        if income_basis == 'sales':
+            total_revenue = sum(int(inv.final_amount) for inv in paid_invoices)
+        else:
+            total_revenue = total_commission
+        pending_count = invoices.filter(status='pending').count()
+        paid_count = invoices.filter(status='paid').count()
+        overdue_queryset = invoices.filter(status='pending', due_date__lt=today).select_related('customer').prefetch_related('payments').order_by('due_date')
         overdue_count = overdue_queryset.count()
         overdue_amount = 0
         overdue_items = []
@@ -121,11 +143,18 @@ class DashboardViewSet(viewsets.ViewSet):
             month_start = datetime.combine(start_date, time.min, tzinfo=now.tzinfo)
             month_end = datetime.combine(next_start_date, time.min, tzinfo=now.tzinfo)
 
-            revenue = Invoice.objects.filter(
-                Q(status='paid') | Q(commission_paid=True),
-                date__gte=month_start,
-                date__lt=month_end
-            ).aggregate(total=Sum('commission_total'))['total'] or 0
+            if income_basis == 'sales':
+                revenue = sum(
+                    int(inv.final_amount)
+                    for inv in paid_invoices
+                    if month_start <= inv.date < month_end
+                )
+            else:
+                revenue = sum(
+                    int(inv.commission_total)
+                    for inv in paid_invoices
+                    if month_start <= inv.date < month_end
+                )
 
             expense = Expense.objects.filter(
                 date__gte=start_date,
@@ -142,22 +171,25 @@ class DashboardViewSet(viewsets.ViewSet):
 
         # Top services
         from ..models import InvoiceItem
+        items = InvoiceItem.objects.all()
+        if business is not None:
+            items = items.filter(invoice__business=business)
         top_services = list(
-            InvoiceItem.objects.values('service_title_snapshot')
+            items.values('service_title_snapshot')
             .annotate(count=Count('id'), total=Sum('main_price'))
             .order_by('-count')[:5]
         )
 
         # Top customers
         top_customers = list(
-            Invoice.objects.filter(Q(status='paid') | Q(commission_paid=True))
+            invoices.filter(Q(status='paid') | Q(commission_paid=True))
             .values('customer__name')
             .annotate(total=Sum('total_amount'), count=Count('id'))
             .order_by('-total')[:5]
         )
 
         # Recent invoices
-        recent = Invoice.objects.select_related('customer').order_by('-date')[:8]
+        recent = invoices.select_related('customer').order_by('-date')[:8]
         recent_invoices = []
         for inv in recent:
             recent_invoices.append({
@@ -198,6 +230,7 @@ class DashboardViewSet(viewsets.ViewSet):
         ).aggregate(t=Sum('amount'))['t'] or 0
 
         data = {
+            'income_basis': income_basis,
             'total_customers': total_customers,
             'total_invoices': total_invoices,
             'total_revenue': int(total_revenue),
@@ -226,7 +259,7 @@ class DashboardViewSet(viewsets.ViewSet):
             allowed.update(('total_invoices', 'pending_invoices', 'paid_invoices', 'recent_invoices'))
         if 'reports' in modules:
             if 'invoices' in modules:
-                allowed.update(('total_revenue', 'total_commission', 'overdue_invoices', 'overdue_amount', 'overdue_items'))
+                allowed.update(('income_basis', 'total_revenue', 'total_commission', 'overdue_invoices', 'overdue_amount', 'overdue_items'))
                 if 'services' in modules:
                     allowed.add('top_services')
                 if 'customers' in modules:

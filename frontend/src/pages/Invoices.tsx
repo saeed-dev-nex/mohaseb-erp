@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { currencyLabel, fromDisplayAmount } from "../lib/money";
 import { Link, useSearchParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useQueryClient } from "@tanstack/react-query";
@@ -78,7 +79,7 @@ const amountInTomans = (value: string | number) => {
     ),
   );
   const amount = Number(latin.replace(/\D/g, ""));
-  return amount ? amount * 1000 : "";
+  return amount ? fromDisplayAmount(amount * 1000) : "";
 };
 const formatThousands = (value: string | number) => {
   const digits = String(value).replace(/[^\d۰-۹٠-٩]/g, "");
@@ -508,7 +509,7 @@ const Invoices = () => {
               )}
               <label className="space-y-1.5">
                 <span className="text-xs text-slate-400">
-                  حداقل مبلغ کل (هزار تومان)
+                  حداقل مبلغ کل (هزار {currencyLabel()})
                 </span>
                 <input
                   inputMode="numeric"
@@ -520,7 +521,7 @@ const Invoices = () => {
               </label>
               <label className="space-y-1.5">
                 <span className="text-xs text-slate-400">
-                  حداکثر مبلغ کل (هزار تومان)
+                  حداکثر مبلغ کل (هزار {currencyLabel()})
                 </span>
                 <input
                   inputMode="numeric"

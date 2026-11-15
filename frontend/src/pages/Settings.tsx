@@ -9,6 +9,7 @@ import {
   welcomeAPI,
 } from "../services/api";
 import { F, Section, inp } from "./settings/shared";
+import { setCurrencyUnit } from "../lib/money";
 import { ServicePackagesSection } from "./settings/ServicePackagesSection";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { BackupTab } from "./settings/BackupTab";
@@ -27,6 +28,7 @@ type ProfileForm = {
   website: string;
   footer_text: string;
   tax_id: string;
+  currency_unit: string;
   customer_documents_path: string;
 };
 
@@ -88,6 +90,7 @@ const Settings = () => {
     website: "",
     footer_text: "",
     tax_id: "",
+    currency_unit: "toman",
     customer_documents_path: "",
   });
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -228,6 +231,7 @@ const Settings = () => {
             website: profile.website || "",
             footer_text: profile.footer_text || "",
             tax_id: profile.tax_id || "",
+            currency_unit: profile.currency_unit || "toman",
             customer_documents_path: profile.customer_documents_path || "",
           });
           setSocialLinks(profile.social_links || []);
@@ -313,6 +317,7 @@ const Settings = () => {
     if (logoFile) fd.append("logo", logoFile);
     try {
       await profileAPI.update(fd);
+      setCurrencyUnit(form.currency_unit);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
@@ -510,6 +515,21 @@ const Settings = () => {
                       onChange={(e) => set("tax_id", e.target.value)}
                       placeholder="شناسه مالیاتی (اختیاری)"
                     />
+                  </F>
+                  <F label="واحد پول">
+                    <select
+                      className={inp}
+                      value={form.currency_unit}
+                      onChange={(e) => set("currency_unit", e.target.value)}
+                    >
+                      <option value="toman">تومان</option>
+                      <option value="rial">ریال</option>
+                    </select>
+                    <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                      مبالغ در پایگاه داده به تومان ذخیره می‌شوند؛ با انتخاب
+                      «ریال»، نمایش و ورود مبالغ در کل برنامه به ریال (×۱۰)
+                      انجام می‌شود و مقدار ذخیره‌شده تغییری نمی‌کند.
+                    </p>
                   </F>
                 </div>
               </Section>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { formatMoney } from "../lib/money";
 import { inventoryAPI } from "../services/api";
 import type { CatalogProfile, Product } from "../services/api";
 import PriceInput from "./PriceInput";
@@ -258,7 +259,7 @@ const ProductsCatalog = ({
                     {fmt(p.stock_value)}
                   </td>
                   <td className="py-2.5 px-3 text-slate-200">
-                    {fmt(p.sale_price)} تومان
+                    {formatMoney(p.sale_price)}
                   </td>
                   <td className="py-2.5 px-3">
                     <span
@@ -305,12 +306,12 @@ const ProductsCatalog = ({
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">کد کالا *</label>
+                <label className="text-xs text-slate-400">کد کالا</label>
                 <input
                   className={inp}
                   value={form.code}
                   onChange={(e) => set("code", e.target.value)}
-                  placeholder="مثلاً 1001"
+                  placeholder="خالی = کد خودکار بعدی"
                 />
               </div>
               <div className="space-y-1">

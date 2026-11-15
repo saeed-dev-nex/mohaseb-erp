@@ -18,6 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..business_context import resolve_business
+from .common import HasBusinessModuleAccess
 from ..models import Account, FiscalYear, JournalEntry
 from ..serializers import AccountSerializer, JournalEntrySerializer
 from ..services.accounting import (
@@ -34,13 +35,47 @@ def _require_business(request):
     return business
 
 
+def _module_for_path(path):
+    """ERP module a request path belongs to (for role-scoped writes)."""
+    prefixes = (
+        (('/api/accounts/', '/api/journal-entries/', '/api/accounting/'), 'accounting'),
+        (('/api/products/', '/api/purchases/', '/api/warehouses/',
+          '/api/stock-transfers/', '/api/stock-counts/', '/api/inventory/'), 'inventory'),
+        (('/api/payroll-periods/', '/api/employment-profiles/', '/api/payslips/',
+          '/api/payroll/settings/'), 'payroll'),
+        (('/api/tax/', '/api/moadian-submissions/'), 'tax'),
+        (('/api/fixed-assets/', '/api/depreciation-runs/'), 'assets'),
+    )
+    for group, module in prefixes:
+        if any(path.startswith(prefix) for prefix in group):
+            return module
+    return None
+
+
 def _require_write(request, business):
+    """Write gate for ERP documents.
+
+    Owners/managers (and superusers) write everywhere. Functional
+    roles (حسابدار، انباردار، …) may write inside the modules their
+    role grants in this business — an accountant can post journals
+    but cannot touch the warehouse, and vice versa.
+    """
     user = request.user
     if user.is_superuser:
         return
     membership = business.memberships.filter(user=user).first()
-    if membership is None or membership.role not in WRITE_ROLES:
-        raise PermissionDenied('برای ثبت و ویرایش اسناد حسابداری باید مدیر یا مالک کسب‌وکار باشید.')
+    if membership is None:
+        raise PermissionDenied('برای ثبت و ویرایش اسناد باید عضو این کسب‌وکار باشید.')
+    if membership.role in WRITE_ROLES:
+        return
+    module = _module_for_path(request.path)
+    if module is not None:
+        from ..business_templates import role_modules
+
+        modules = role_modules(business.template_key, membership.role)
+        if modules is not None and module in modules:
+            return
+    raise PermissionDenied('نقش شما در این کسب‌وکار اجازهٔ ثبت و ویرایش در این بخش را نمی‌دهد.')
 
 
 def _resolve_fiscal_year(business, raw_id):
@@ -57,7 +92,8 @@ def _resolve_fiscal_year(business, raw_id):
 
 class AccountViewSet(viewsets.ModelViewSet):
     serializer_class = AccountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'accounting'
     pagination_class = None
 
     def get_queryset(self):
@@ -96,7 +132,8 @@ class AccountViewSet(viewsets.ModelViewSet):
 
 class JournalEntryViewSet(viewsets.ModelViewSet):
     serializer_class = JournalEntrySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'accounting'
 
     def get_queryset(self):
         business = _require_business(self.request)
@@ -201,7 +238,9 @@ class JournalEntryViewSet(viewsets.ModelViewSet):
 class ChartSeedView(APIView):
     """POST /api/accounting/seed-chart/ — seed the standard chart."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'accounting'
 
     def post(self, request):
         business = _require_business(request)
@@ -212,7 +251,9 @@ class ChartSeedView(APIView):
 class TrialBalanceView(APIView):
     """GET /api/accounting/trial-balance/?fiscal_year=<id>"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'accounting'
 
     def get(self, request):
         business = _require_business(request)
@@ -223,7 +264,9 @@ class TrialBalanceView(APIView):
 class AccountLedgerView(APIView):
     """GET /api/accounting/ledger/?account=<id>&fiscal_year=<id>"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'accounting'
 
     def get(self, request):
         business = _require_business(request)

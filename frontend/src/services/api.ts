@@ -365,6 +365,13 @@ export interface InvoiceExtraField {
 export interface InvoiceProfile {
   vehicle: boolean;
   extras: InvoiceExtraField[];
+  payment_cards?: boolean;
+}
+
+export interface RolePreset {
+  key: string;
+  label: string;
+  modules: string[] | null;
 }
 
 export interface CatalogProfile {
@@ -392,6 +399,8 @@ export interface Business {
   effective_modules: string[];
   current_fiscal_year: FiscalYear | null;
   my_role: string | null;
+  my_modules: string[] | null;
+  role_presets: RolePreset[];
   is_active: boolean;
 }
 

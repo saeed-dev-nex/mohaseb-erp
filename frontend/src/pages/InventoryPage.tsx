@@ -163,7 +163,7 @@ export default function InventoryPage() {
   }, [load]);
 
   const createProduct = async () => {
-    if (!newProduct.code || !newProduct.name) return;
+    if (!newProduct.name) return;
     try {
       await inventoryAPI.createProduct({
         code: newProduct.code,
@@ -660,7 +660,7 @@ export default function InventoryPage() {
           <div className="grid sm:grid-cols-5 gap-2 items-end mb-2">
             <input
               className={inp}
-              placeholder="کد کالا"
+              placeholder="کد کالا (خالی = خودکار)"
               value={newProduct.code}
               onChange={(e) =>
                 setNewProduct({ ...newProduct, code: e.target.value })

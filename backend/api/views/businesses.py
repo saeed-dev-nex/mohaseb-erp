@@ -172,6 +172,16 @@ class BusinessViewSet(viewsets.ModelViewSet):
         role = request.data.get('role') or 'operator'
         if role not in dict(BusinessMembership.ROLE_CHOICES):
             raise ValidationError({'role': 'نقش نامعتبر است.'})
+        # Roles are per-trade: a shop has no «اپراتور» and a service
+        # counter has no «انباردار» — only the template's presets (plus
+        # مالک) may be assigned in this business.
+        from ..business_templates import template_role_presets
+
+        allowed_roles = {'owner'} | {
+            preset['key'] for preset in template_role_presets(business.template_key)
+        }
+        if role not in allowed_roles:
+            raise ValidationError({'role': 'این نقش برای نوع شغل این کسب‌وکار تعریف نشده است.'})
         try:
             user = User.objects.get(username=username)
         except User.DoesNotExist:

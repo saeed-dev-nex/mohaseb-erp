@@ -1,4 +1,5 @@
 import React from "react";
+import { formatMoney } from "../lib/money";
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -466,7 +467,7 @@ export const formatPrice = (
   amount: number | string | null | undefined,
 ): string => {
   if (!amount && amount !== 0) return "---";
-  return new Intl.NumberFormat("fa-IR").format(amount as number) + " تومان";
+  return formatMoney(amount);
 };
 
 // ---- Confirm Dialog ----

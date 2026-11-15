@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { formatMoney, useCurrency } from "../lib/money";
 import { chequesAPI, customersAPI } from "../services/api";
 import PriceInput from "../components/PriceInput";
 import JalaliDatePicker from "../components/JalaliDatePicker";
@@ -130,6 +131,7 @@ const ChequeModal = ({
   saving,
   error,
 }: ChequeModalProps) => {
+  const { label: currencyLabelText } = useCurrency();
   const [form, setForm] = useState<ChequeForm>(
     (initial as ChequeForm | null) || {
       customer: "",
@@ -280,7 +282,7 @@ const ChequeModal = ({
               htmlFor="cheque-amount"
               className="text-xs text-slate-400 mb-1 block"
             >
-              مبلغ چک (تومان) *
+              مبلغ چک ({currencyLabelText}) *
             </label>
             <PriceInput
               id="cheque-amount"
@@ -664,10 +666,7 @@ const Cheques = () => {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 font-semibold text-slate-100">
-                        {fmt(chq.amount)}{" "}
-                        <span className="text-xs text-slate-500 font-normal">
-                          تومان
-                        </span>
+                        {formatMoney(chq.amount)}
                       </td>
                       <td className="py-3.5 px-4">
                         <span

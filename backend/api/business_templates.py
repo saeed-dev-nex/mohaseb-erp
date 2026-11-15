@@ -351,7 +351,87 @@ def template_modules(key):
 
 
 def template_invoice_profile(key):
-    return get_template(key).get('invoice_profile') or {'vehicle': False, 'extras': []}
+    profile = dict(
+        get_template(key).get('invoice_profile') or {'vehicle': False, 'extras': []}
+    )
+    # «کارت مشتری / کارت دفتر» is the government-counter (پیشخوان)
+    # payment workflow: only trades whose operators pay on behalf of
+    # customers see it on the invoice form.
+    resolved = key if key in TEMPLATES else DEFAULT_TEMPLATE_KEY
+    profile['payment_cards'] = resolved in ('services_repair', 'general')
+    return profile
+
+
+# ---------------------------------------------------------------------------
+# Role presets per trade (بخش کاربران). A business's members hold one
+# role; the role decides which modules of that business the member may
+# use. The owner/manager roles see every module the business has;
+# functional roles get the slice their job needs. Modules a role does
+# not list are closed on the API as well as hidden in the UI — while
+# server-side automation (an invoice posting its journal and stock
+# movements) keeps working regardless of who issued the invoice.
+# ---------------------------------------------------------------------------
+
+_ALL = None  # sentinel: every module the business itself has
+
+ROLE_PRESETS = {
+    'product': [
+        {'key': 'manager', 'label': 'مدیر', 'modules': _ALL},
+        {'key': 'accountant', 'label': 'حسابدار', 'modules': [
+            'invoices', 'customers', 'accounting', 'tax', 'reports',
+            'cheques', 'expenses',
+        ]},
+        {'key': 'warehouse', 'label': 'انباردار', 'modules': [
+            'inventory', 'services', 'customers',
+        ]},
+        {'key': 'seller', 'label': 'فروشنده', 'modules': [
+            'invoices', 'customers', 'services', 'cheques',
+        ]},
+        {'key': 'viewer', 'label': 'مشاهده‌گر', 'modules': [
+            'invoices', 'customers', 'reports',
+        ]},
+    ],
+    'service': [
+        {'key': 'manager', 'label': 'مدیر', 'modules': _ALL},
+        {'key': 'accountant', 'label': 'حسابدار', 'modules': [
+            'invoices', 'customers', 'accounting', 'tax', 'reports',
+            'cheques', 'expenses',
+        ]},
+        {'key': 'operator', 'label': 'اپراتور', 'modules': [
+            'invoices', 'customers', 'services', 'cheques',
+        ]},
+        {'key': 'viewer', 'label': 'مشاهده‌گر', 'modules': [
+            'invoices', 'customers', 'reports',
+        ]},
+    ],
+}
+
+
+def template_role_presets(key):
+    """Role presets for the trade of *key* (by its catalog kind)."""
+    kind = template_catalog_profile(key)['kind']
+    return ROLE_PRESETS.get(kind) or ROLE_PRESETS['service']
+
+
+def role_modules(key, role):
+    """Module list a *role* grants inside a business of template *key*.
+
+    Returns None for full-access roles (owner/manager) and for unknown
+    roles (legacy behaviour: no extra restriction).
+    """
+    if role in ('owner', 'manager'):
+        return None
+    for preset in template_role_presets(key):
+        if preset['key'] == role:
+            return preset['modules']
+    return None
+
+
+def template_income_basis(key):
+    """What «درآمد» means for a trade: commission-based trades (دفاتر
+    پیشخوان، تعمیرات، آرایشگاه) earn the commission; everyone else
+    earns the sale itself."""
+    return 'commission' if template_catalog_profile(key)['commission'] else 'sales'
 
 
 def template_catalog(key):
@@ -367,8 +447,9 @@ def templates_payload():
             'description': spec['description'],
             'modules': list(spec['modules']),
             'terminology': spec['terminology'],
-            'invoice_profile': spec.get('invoice_profile') or {'vehicle': False, 'extras': []},
+            'invoice_profile': template_invoice_profile(key),
             'catalog_profile': template_catalog_profile(key),
+            'role_presets': template_role_presets(key),
             'catalog': list(spec.get('catalog') or []),
         }
         for key, spec in TEMPLATES.items()

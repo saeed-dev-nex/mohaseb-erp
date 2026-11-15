@@ -1,12 +1,18 @@
 import React, { useRef } from "react";
 import type { InputHTMLAttributes } from "react";
 import { numberToWords } from "../utils/persian";
+import {
+  currencyLabel,
+  fromDisplayAmount,
+  toDisplayAmount,
+  useCurrency,
+} from "../lib/money";
 
 /**
- * PriceInput — ورود قیمت به هزار تومان
+ * PriceInput — ورود قیمت به هزار واحد پول
  *
- * کاربر عدد را به واحد «هزار تومان» وارد می‌کند (مثلاً 200)
- * و مقدار واقعی به تومان ذخیره می‌شود (200 × 1000 = 200,000)
+ * کاربر عدد را به واحد «هزار تومان» (یا هزار ریال، طبق تنظیم واحد
+ * پول) وارد می‌کند و مقدار واقعی همیشه به تومان ذخیره می‌شود.
  *
  * بهبود: صفرها به جای لیبل مجزا، دقیقاً در کنار خود عدد و چسبیده به آن نمایش داده می‌شوند.
  *
@@ -42,13 +48,16 @@ const PriceInput = ({
 }: PriceInputProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { unit } = useCurrency();
 
-  // Display value (thousands)
+  // Display value (thousands of the ACTIVE unit; storage stays Toman)
   const displayValue =
     value && !(blankWhenZero && Number(value) === 0)
-      ? Math.floor(Number(value) / 1000)
+      ? Math.floor(toDisplayAmount(Number(value)) / 1000)
       : "";
   const realAmount = Number(value) || 0;
+  const displayAmount = toDisplayAmount(realAmount);
+  const label = currencyLabel(unit);
 
   const baseCls =
     "flex items-center justify-end w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white text-sm placeholder-slate-500 focus-within:ring-2 focus-within:ring-blue-500/40 transition-all";
@@ -67,7 +76,7 @@ const PriceInput = ({
             ,000
           </span>
           <span className="text-slate-400 text-xs ml-1.5 font-medium leading-none">
-            تومان
+            {label}
           </span>
         </div>
 
@@ -81,7 +90,7 @@ const PriceInput = ({
             if (raw === "" || raw === "0") {
               onChange(0);
             } else {
-              onChange(Math.round(Number(raw) * 1000));
+              onChange(Math.round(fromDisplayAmount(Number(raw) * 1000)));
             }
           }}
           placeholder={placeholder}
@@ -100,7 +109,7 @@ const PriceInput = ({
         dir="rtl"
         title={
           realAmount > 0
-            ? `= ${fmt(realAmount)} تومان (${numberToWords(realAmount)})`
+            ? `= ${fmt(displayAmount)} ${label} (${numberToWords(displayAmount)})`
             : undefined
         }
       >
@@ -108,10 +117,10 @@ const PriceInput = ({
           <>
             ={" "}
             <span className="font-semibold text-emerald-400">
-              {fmt(realAmount)} تومان
+              {fmt(displayAmount)} {label}
             </span>{" "}
             <span className="text-emerald-400/60">
-              ({numberToWords(realAmount)})
+              ({numberToWords(displayAmount)})
             </span>
           </>
         )}

@@ -1,3 +1,4 @@
+import { currencyLabel } from "../lib/money";
 /**
  * Persian / Jalali utility functions
  * No external dependency — pure arithmetic conversion
@@ -244,7 +245,7 @@ export function numberToWords(num: number | string): string {
     const word = _threeDigits(groups[i]);
     parts.push(i > 0 ? `${word} ${_SCALE[i]}` : word);
   }
-  return parts.join(" و ") + " تومان";
+  return parts.join(" و ") + " " + currencyLabel();
 }
 
 // ────────────────────────────────────────────────────────────────

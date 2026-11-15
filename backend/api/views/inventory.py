@@ -21,6 +21,7 @@ from ..models import (
     InventorySettings, Product, PurchaseInvoice, StockCount, StockCountLine,
     StockMovement, StockTransfer, Warehouse,
 )
+from .common import HasBusinessModuleAccess
 from ..serializers import (
     InventorySettingsSerializer, ProductSerializer, PurchaseInvoiceSerializer,
     StockCountSerializer, StockMovementSerializer, StockTransferSerializer,
@@ -39,7 +40,8 @@ IN_KINDS = ('in_purchase', 'in_return', 'in_adjust', 'in_transfer')
 
 class WarehouseViewSet(viewsets.ModelViewSet):
     serializer_class = WarehouseSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'inventory'
     pagination_class = None
 
     def get_queryset(self):
@@ -66,7 +68,8 @@ class WarehouseViewSet(viewsets.ModelViewSet):
 
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'inventory'
     pagination_class = None
 
     def get_queryset(self):
@@ -84,7 +87,27 @@ class ProductViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         business = _require_business(self.request)
         _require_write(self.request, business)
-        serializer.save(business=business)
+        if (serializer.validated_data.get('code') or '').strip():
+            serializer.save(business=business)
+            return
+        # Auto code: the next sequential numeric code of this business
+        # (seeded catalogs start at 1001). Retried on the unique
+        # constraint in case two operators create products at once.
+        from django.db import IntegrityError
+
+        numeric_codes = [
+            int(code)
+            for code in business.products.values_list('code', flat=True)
+            if (code or '').isdigit()
+        ]
+        next_code = (max(numeric_codes) + 1) if numeric_codes else 1001
+        for attempt in range(5):
+            try:
+                serializer.save(business=business, code=str(next_code + attempt))
+                return
+            except IntegrityError:
+                continue
+        raise ValidationError({'code': 'ساخت کد خودکار ناموفق بود؛ یک کد دستی وارد کنید.'})
 
     def perform_update(self, serializer):
         business = _require_business(self.request)
@@ -101,7 +124,8 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 class PurchaseInvoiceViewSet(viewsets.ModelViewSet):
     serializer_class = PurchaseInvoiceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'inventory'
 
     def get_queryset(self):
         business = _require_business(self.request)
@@ -219,7 +243,9 @@ class PurchaseInvoiceViewSet(viewsets.ModelViewSet):
 class KardexView(APIView):
     """GET /api/inventory/kardex/?product=<id> — کاردکس کالا."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'inventory'
 
     def get(self, request):
         business = _require_business(request)
@@ -252,7 +278,9 @@ class KardexView(APIView):
 class StockAdjustView(APIView):
     """POST /api/inventory/adjust/ — گردش اصلاحی دستی (ورود/خروج)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'inventory'
 
     def post(self, request):
         business = _require_business(request)
@@ -294,7 +322,8 @@ class StockTransferViewSet(viewsets.ModelViewSet):
     """حواله‌های انتقال بین انبارها."""
 
     serializer_class = StockTransferSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'inventory'
     pagination_class = None
 
     def get_queryset(self):
@@ -393,7 +422,8 @@ class StockCountViewSet(viewsets.ModelViewSet):
     فیزیکی و اعمال خودکار مغایرت‌ها به‌صورت گردش اصلاحی."""
 
     serializer_class = StockCountSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'inventory'
     pagination_class = None
 
     def get_queryset(self):
@@ -493,7 +523,9 @@ class StockCountViewSet(viewsets.ModelViewSet):
 class InventorySettingsView(APIView):
     """GET/PUT /api/inventory/settings/ — تنظیمات انبار کسب‌وکار."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'inventory'
 
     def get(self, request):
         business = _require_business(request)
@@ -523,7 +555,8 @@ class InventoryAlertsView(APIView):
     - dead_stock: کالاهای دارای موجودی بدون هیچ فروش در ۹۰ روز گذشته.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'inventory'
 
     def get(self, request):
         from datetime import timedelta

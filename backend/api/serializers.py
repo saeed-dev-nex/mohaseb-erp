@@ -794,7 +794,7 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
         fields = [
             'name', 'subtitle', 'logo', 'logo_url', 'phone', 'mobile',
             'address', 'website', 'instagram', 'telegram',
-            'footer_text', 'tax_id', 'customer_documents_path', 'social_links'
+            'footer_text', 'tax_id', 'currency_unit', 'customer_documents_path', 'social_links'
         ]
 
     def get_logo_url(self, obj):
@@ -892,6 +892,8 @@ class BusinessSerializer(serializers.ModelSerializer):
     effective_modules = serializers.SerializerMethodField()
     current_fiscal_year = FiscalYearSerializer(read_only=True)
     my_role = serializers.SerializerMethodField()
+    my_modules = serializers.SerializerMethodField()
+    role_presets = serializers.SerializerMethodField()
 
     class Meta:
         model = Business
@@ -901,6 +903,7 @@ class BusinessSerializer(serializers.ModelSerializer):
             'person_type', 'legal_name', 'national_id', 'economic_code',
             'registration_number', 'phone', 'address', 'modules_override',
             'effective_modules', 'current_fiscal_year', 'my_role',
+            'my_modules', 'role_presets',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -933,6 +936,29 @@ class BusinessSerializer(serializers.ModelSerializer):
             return 'owner'
         membership = obj.memberships.filter(user=user).first()
         return membership.role if membership else None
+
+    def get_my_modules(self, obj):
+        """Modules of THIS business the caller may use, per their role.
+
+        None means «no per-role restriction» (owner/manager/superuser,
+        or no membership context) — the UI then falls back to the
+        business's effective modules alone.
+        """
+        from .business_templates import role_modules
+
+        role = self.get_my_role(obj)
+        if role is None:
+            return None
+        modules = role_modules(obj.template_key, role)
+        if modules is None:
+            return None
+        effective = set(obj.effective_modules())
+        return [name for name in modules if name in effective]
+
+    def get_role_presets(self, obj):
+        from .business_templates import template_role_presets
+
+        return template_role_presets(obj.template_key)
 
 
 # ---------------------------------------------------------------------------
@@ -1104,6 +1130,9 @@ class WarehouseSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     current_stock = serializers.SerializerMethodField()
     stock_value = serializers.SerializerMethodField()
+    # Empty code = «کد خودکار»: the viewset assigns the next sequential
+    # numeric code of the business (see ProductViewSet.perform_create).
+    code = serializers.CharField(required=False, allow_blank=True, default='')
 
     class Meta:
         model = Product
