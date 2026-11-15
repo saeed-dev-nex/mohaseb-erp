@@ -6,6 +6,7 @@ import {
   type FiscalYear,
 } from "../../services/api";
 import { showWaiting, hideWaiting } from "../../lib/waiting";
+import { formatApiError } from "../../utils/apiError";
 import { useBusiness } from "../../lib/business";
 import { F, Section, inp } from "./shared";
 
@@ -82,18 +83,25 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
 
   const selected = businesses.find((b) => b.id === selectedId) ?? null;
 
+  // The everyday role of a business's trade (فروشنده for shops,
+  // اپراتور for service trades) — the safe default for the member
+  // form; «operator» is NOT valid for product-kind businesses.
+  const everydayRole = (business: Business | null): string => {
+    const presets = business?.role_presets ?? [];
+    const everyday =
+      presets.find((p) => p.key === "seller" || p.key === "operator") ??
+      presets[0];
+    return everyday?.key ?? "operator";
+  };
+
   // The member role must belong to the selected business's trade:
-  // when the business changes, fall back to its everyday role
-  // (فروشنده for shops, اپراتور for service trades).
+  // when the business changes, fall back to its everyday role.
   useEffect(() => {
     if (!selected) return;
     const presets = selected.role_presets ?? [];
     const allowed = ["owner", ...presets.map((p) => p.key)];
     if (!allowed.includes(memberForm.role)) {
-      const everyday =
-        presets.find((p) => p.key === "seller" || p.key === "operator") ??
-        presets[0];
-      if (everyday) setMemberForm((f) => ({ ...f, role: everyday.key }));
+      setMemberForm((f) => ({ ...f, role: everydayRole(selected) }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, businesses]);
@@ -217,10 +225,13 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
       await businessesAPI.addMember(selected.id, memberForm);
       const { data } = await businessesAPI.members(selected.id);
       setMembers(data as Member[]);
-      setMemberForm({ username: "", role: "operator" });
-    } catch {
+      setMemberForm({ username: "", role: everydayRole(selected) });
+    } catch (e) {
       setError(
-        "افزودن عضو انجام نشد. نام کاربری باید دقیقاً نام یک کاربر موجود باشد.",
+        formatApiError(
+          e,
+          "افزودن عضو انجام نشد. نام کاربری باید دقیقاً نام یک کاربر موجود باشد.",
+        ),
       );
     }
   };
