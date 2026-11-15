@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { formatMoney } from "../lib/money";
 import { Link, useParams } from "react-router-dom";
 import { usersAPI } from "../services/api";
 
@@ -52,7 +53,7 @@ const RANGES = [
 ] as const;
 
 const faNum = (value: number) => value.toLocaleString("fa-IR");
-const faMoney = (value: number) => `${faNum(value)} تومان`;
+const faMoney = (value: number) => formatMoney(value);
 const faDate = (value: string | null) =>
   value ? new Date(value).toLocaleDateString("fa-IR") : "—";
 const faDateTime = (value: string | null) =>

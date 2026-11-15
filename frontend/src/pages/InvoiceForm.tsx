@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { formatMoney } from "../lib/money";
 import type { ReactNode } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,8 +36,7 @@ import { hideWaiting, showWaiting } from "../lib/waiting";
 import { VehicleInfoFields } from "../components/VehicleInfoFields";
 import { Field, Section, inputCls, selectCls } from "../components/FormSection";
 
-const fmt = (n: number | string | null | undefined) =>
-  new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
+const fmt = (n: number | string | null | undefined) => formatMoney(n);
 
 // ── Speed helpers: draft autosave + remembered operator defaults ──
 const DRAFT_KEY = "mohaseb:invoice-draft:v1";
@@ -569,6 +569,15 @@ const InvoiceForm = () => {
   // vehicle trades (services & repair). Without a business context
   // (older installs) keep the base product's behaviour.
   const showVehicle = invoiceProfile ? invoiceProfile.vehicle : true;
+  // «کارت مشتری/دفتر» is the government-counter payment workflow and
+  // the commission block is the income of commission-based trades;
+  // other trades (shops, restaurants, …) must not see either.
+  const showPaymentCards = invoiceProfile
+    ? Boolean(invoiceProfile.payment_cards)
+    : true;
+  const showCommission = currentBusiness
+    ? Boolean(currentBusiness.catalog_profile?.commission)
+    : true;
   useEffect(() => {
     if (!currentBusiness) {
       setProducts([]);
@@ -1418,18 +1427,20 @@ const InvoiceForm = () => {
                 clearable={false}
               />
             </Field>
-            <Field label="کارت پرداخت">
-              <SearchableSelect
-                value={form.card_payment_source}
-                onChange={(v) => setField("card_payment_source", v)}
-                options={[
-                  { value: "customer", label: "کارت مشتری" },
-                  { value: "office", label: "کارت دفتر" },
-                ]}
-                placeholder="انتخاب کارت"
-                clearable={false}
-              />
-            </Field>
+            {showPaymentCards && (
+              <Field label="کارت پرداخت">
+                <SearchableSelect
+                  value={form.card_payment_source}
+                  onChange={(v) => setField("card_payment_source", v)}
+                  options={[
+                    { value: "customer", label: "کارت مشتری" },
+                    { value: "office", label: "کارت دفتر" },
+                  ]}
+                  placeholder="انتخاب کارت"
+                  clearable={false}
+                />
+              </Field>
+            )}
             <Field label="سایز کاغذ">
               <SearchableSelect
                 value={form.paper_size}
@@ -1757,12 +1768,14 @@ const InvoiceForm = () => {
           </Section>
         )}
 
-        {form.card_payment_source === "office" && officeCardFee > 0 && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-            با توجه به مبلغ خدمات و کارت دفتر، ردیف «واریزی» به مبلغ{" "}
-            {fmt(officeCardFee)} به‌صورت خودکار به فاکتور اضافه می‌شود.
-          </div>
-        )}
+        {showPaymentCards &&
+          form.card_payment_source === "office" &&
+          officeCardFee > 0 && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              با توجه به مبلغ خدمات و کارت دفتر، ردیف «واریزی» به مبلغ{" "}
+              {fmt(officeCardFee)} به‌صورت خودکار به فاکتور اضافه می‌شود.
+            </div>
+          )}
 
         {/* Financial Summary */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -1795,20 +1808,22 @@ const InvoiceForm = () => {
                 )}
               </div>
 
-              {/* Global Commission */}
-              <div className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-4">
-                <Field label="💼 کارمزد (درآمد شما)">
-                  <PriceInput
-                    value={form.commission_total}
-                    onChange={(v) => setField("commission_total", v)}
-                    borderColor="border-yellow-500/30 focus:ring-yellow-500/30"
-                  />
-                </Field>
-                <p className="text-yellow-500/60 text-[10px] mt-2">
-                  کارمزد به مبلغ کل فاکتور اضافه می‌شود — فقط این مبلغ به عنوان
-                  درآمد شما محاسبه می‌گردد
-                </p>
-              </div>
+              {/* Global Commission — commission-based trades only */}
+              {showCommission && (
+                <div className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-4">
+                  <Field label="💼 کارمزد (درآمد شما)">
+                    <PriceInput
+                      value={form.commission_total}
+                      onChange={(v) => setField("commission_total", v)}
+                      borderColor="border-yellow-500/30 focus:ring-yellow-500/30"
+                    />
+                  </Field>
+                  <p className="text-yellow-500/60 text-[10px] mt-2">
+                    کارمزد به مبلغ کل فاکتور اضافه می‌شود — فقط این مبلغ به
+                    عنوان درآمد شما محاسبه می‌گردد
+                  </p>
+                </div>
+              )}
 
               {/* Optional rounding of the final amount */}
               <div className="mt-4 bg-sky-500/5 border border-sky-500/25 rounded-xl p-4">
@@ -1867,7 +1882,7 @@ const InvoiceForm = () => {
                     <p className="text-sky-300 text-xs mt-2">
                       مبلغ نهایی پس از رند: {fmt(payableAmount)}
                       {roundingAdjustment !== 0 &&
-                        ` (${roundingAdjustment > 0 ? "+" : "−"}${fmt(Math.abs(roundingAdjustment))} تومان)`}
+                        ` (${roundingAdjustment > 0 ? "+" : "−"}${fmt(Math.abs(roundingAdjustment))})`}
                     </p>
                   </div>
                 )}
@@ -1878,7 +1893,7 @@ const InvoiceForm = () => {
                   <span className="text-slate-400">جمع خدمات</span>
                   <span className="text-slate-200">{fmt(subtotal)}</span>
                 </div>
-                {officeCardFee > 0 && (
+                {showPaymentCards && officeCardFee > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-amber-300">واریزی کارت دفتر</span>
                     <span className="text-amber-300">
@@ -1886,7 +1901,7 @@ const InvoiceForm = () => {
                     </span>
                   </div>
                 )}
-                {Number(form.commission_total) > 0 && (
+                {showCommission && Number(form.commission_total) > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-yellow-400/80">
                       💼 کارمزد (درآمد شما)

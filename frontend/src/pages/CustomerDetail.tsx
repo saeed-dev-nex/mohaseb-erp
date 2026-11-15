@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import { formatMoney } from "../lib/money";
 import { Spinner } from "../components/ui";
 import {
   useParams,
@@ -13,8 +14,7 @@ import {
   auditAPI,
 } from "../services/api";
 
-const fmt = (n: number | string | null | undefined) =>
-  new Intl.NumberFormat("fa-IR").format(Number(n) || 0) + " تومان";
+const fmt = (n: number | string | null | undefined) => formatMoney(n);
 const persianDate = (d: string | null | undefined): string => {
   if (!d) return "---";
   try {

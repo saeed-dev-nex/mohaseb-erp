@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { formatMoney } from "../lib/money";
 import type { ReactElement } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -420,7 +421,7 @@ const Services = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">مبلغ پرداختی</span>
                   <span className="text-white font-medium">
-                    {fmt(svc.default_main_price)} تومان
+                    {formatMoney(svc.default_main_price)}
                   </span>
                 </div>
                 {svc.has_extra && (
@@ -429,7 +430,7 @@ const Services = () => {
                       {svc.extra_label || "استعلام"}
                     </span>
                     <span className="text-slate-300">
-                      {fmt(svc.default_extra_price)} تومان
+                      {formatMoney(svc.default_extra_price)}
                     </span>
                   </div>
                 )}
@@ -439,7 +440,7 @@ const Services = () => {
                       💼 {svc.commission_label || "کارمزد"}
                     </span>
                     <span className="text-yellow-400 font-medium">
-                      {fmt(svc.default_commission)} تومان
+                      {formatMoney(svc.default_commission)}
                     </span>
                   </div>
                 )}

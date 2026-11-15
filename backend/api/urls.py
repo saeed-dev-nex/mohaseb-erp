@@ -10,6 +10,7 @@ from .views import (
     BusinessViewSet, BusinessTemplateListView,
     AccountViewSet, JournalEntryViewSet, ChartSeedView, TrialBalanceView, AccountLedgerView,
     WarehouseViewSet, ProductViewSet, PurchaseInvoiceViewSet, KardexView, StockAdjustView,
+    StockTransferViewSet, StockCountViewSet, InventoryAlertsView, InventorySettingsView,
     EmploymentProfileViewSet, PayrollPeriodViewSet, PayrollSettingsView, PayslipViewSet,
     TaxSettingsView, VatReportView, SeasonalReportView, MoadianSubmissionViewSet,
     FixedAssetViewSet, DepreciationRunViewSet,
@@ -53,6 +54,8 @@ router.register(r'journal-entries', JournalEntryViewSet, basename='journal-entry
 router.register(r'warehouses', WarehouseViewSet, basename='warehouse')
 router.register(r'products', ProductViewSet, basename='product')
 router.register(r'purchases', PurchaseInvoiceViewSet, basename='purchase')
+router.register(r'stock-transfers', StockTransferViewSet, basename='stock-transfer')
+router.register(r'stock-counts', StockCountViewSet, basename='stock-count')
 router.register(r'employment-profiles', EmploymentProfileViewSet, basename='employment-profile')
 router.register(r'payroll-periods', PayrollPeriodViewSet, basename='payroll-period')
 router.register(r'payslips', PayslipViewSet, basename='payslip')
@@ -70,6 +73,8 @@ urlpatterns = [
     path('accounting/ledger/', AccountLedgerView.as_view(), name='accounting_ledger'),
     path('inventory/kardex/', KardexView.as_view(), name='inventory_kardex'),
     path('inventory/adjust/', StockAdjustView.as_view(), name='inventory_adjust'),
+    path('inventory/alerts/', InventoryAlertsView.as_view(), name='inventory_alerts'),
+    path('inventory/settings/', InventorySettingsView.as_view(), name='inventory_settings'),
     path('setup/status/', SetupStatusView.as_view(), name='setup_status'),
     path('setup/test-database/', SetupTestDatabaseView.as_view(), name='setup_test_database'),
     path('setup/configure-database/', SetupConfigureDatabaseView.as_view(), name='setup_configure_database'),

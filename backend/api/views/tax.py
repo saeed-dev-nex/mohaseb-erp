@@ -20,6 +20,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ..models import DepreciationRun, FixedAsset, MoadianSubmission
+from .common import HasBusinessModuleAccess
 from ..serializers import (
     DepreciationRunSerializer, FixedAssetSerializer,
     MoadianSubmissionSerializer, TaxSettingsSerializer,
@@ -43,7 +44,8 @@ def _quarter_params(request):
 
 
 class TaxSettingsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'tax'
 
     def get(self, request):
         business = _require_business(request)
@@ -62,7 +64,9 @@ class TaxSettingsView(APIView):
 class VatReportView(APIView):
     """GET /api/tax/vat-report/?year=1405&season=1"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'tax'
 
     def get(self, request):
         business = _require_business(request)
@@ -73,7 +77,9 @@ class VatReportView(APIView):
 class SeasonalReportView(APIView):
     """GET /api/tax/seasonal/?year=&season= (+ ?export=csv)"""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'tax'
 
     def get(self, request):
         business = _require_business(request)
@@ -99,7 +105,8 @@ class SeasonalReportView(APIView):
 
 class MoadianSubmissionViewSet(viewsets.ModelViewSet):
     serializer_class = MoadianSubmissionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'tax'
     http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_queryset(self):
@@ -153,7 +160,8 @@ class MoadianSubmissionViewSet(viewsets.ModelViewSet):
 
 class FixedAssetViewSet(viewsets.ModelViewSet):
     serializer_class = FixedAssetSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'assets'
     pagination_class = None
 
     def get_queryset(self):
@@ -179,7 +187,8 @@ class FixedAssetViewSet(viewsets.ModelViewSet):
 
 class DepreciationRunViewSet(viewsets.ModelViewSet):
     serializer_class = DepreciationRunSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'assets'
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):

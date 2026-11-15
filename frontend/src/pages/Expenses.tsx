@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { formatMoney } from "../lib/money";
 import { expensesAPI, expenseCategoriesAPI } from "../services/api";
 import PriceInput from "../components/PriceInput";
 import JalaliDatePicker from "../components/JalaliDatePicker";
@@ -286,7 +287,7 @@ const Expenses = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
           label="کل هزینه‌ها"
-          value={fmt(summary.total) + " تومان"}
+          value={formatMoney(summary.total)}
           icon="💸"
           color="red"
         />
@@ -376,7 +377,7 @@ const Expenses = () => {
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-red-400 font-semibold">
-                      {fmt(exp.amount)} تومان
+                      {formatMoney(exp.amount)}
                     </td>
                     <td className="py-3.5 px-4 text-slate-400">
                       {toJalali(exp.date)}

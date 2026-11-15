@@ -578,6 +578,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def report(self, request):
         """Financial report; computation lives in api.services.reports."""
+        from ..business_context import resolve_business
         from ..services.reports import build_report_data
 
         data, invoice_rows = build_report_data(
@@ -585,6 +586,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             date_to=request.query_params.get('date_to', ''),
             status_filter=request.query_params.get('status', ''),
             customer_search=request.query_params.get('customer_name', ''),
+            business=resolve_business(request),
         )
         data['invoices'] = self.get_serializer(invoice_rows[:100], many=True).data
         return Response(data)
@@ -592,6 +594,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def export_excel(self, request):
         """Download the financial report as a real .xlsx workbook (openpyxl)."""
+        from ..business_context import resolve_business
         from ..services.reports import build_excel_bytes
 
         content = build_excel_bytes(
@@ -599,6 +602,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             date_to=request.query_params.get('date_to', ''),
             status_filter=request.query_params.get('status', ''),
             customer_search=request.query_params.get('customer_name', ''),
+            business=resolve_business(request),
         )
         response = HttpResponse(content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = 'attachment; filename="financial_report.xlsx"'

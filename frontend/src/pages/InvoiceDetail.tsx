@@ -1495,7 +1495,7 @@ const InvoiceDetail = () => {
                         مبلغ نهایی پس از رند:{" "}
                         {fmt(roundingBase + roundingPreview)}
                         {roundingPreview !== 0 &&
-                          ` (${roundingPreview > 0 ? "+" : "−"}${fmt(Math.abs(roundingPreview))} تومان)`}
+                          ` (${roundingPreview > 0 ? "+" : "−"}${fmt(Math.abs(roundingPreview))})`}
                       </p>
                     </div>
                   )}

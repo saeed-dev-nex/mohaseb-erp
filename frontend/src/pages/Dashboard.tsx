@@ -60,6 +60,8 @@ type UpcomingCheque = {
 };
 
 type DashboardStats = {
+  income_basis?: string;
+  total_revenue?: number;
   total_customers: number;
   total_invoices: number;
   total_commission: number;
@@ -339,8 +341,12 @@ const Dashboard = () => {
           color="purple"
         />
         <StatCard
-          label="درآمد خالص (کارمزد)"
-          value={formatPrice(stats?.total_commission || 0)}
+          label={
+            stats?.income_basis === "sales"
+              ? "درآمد (فروش)"
+              : "درآمد خالص (کارمزد)"
+          }
+          value={formatPrice(stats?.total_revenue || 0)}
           icon="💰"
           color="green"
         />
@@ -356,9 +362,15 @@ const Dashboard = () => {
       {/* Stats Row 2 — Financial Overview */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 rounded-2xl p-5">
-          <p className="text-emerald-400/80 text-xs mb-1">💼 کل کارمزد</p>
+          <p className="text-emerald-400/80 text-xs mb-1">
+            {stats?.income_basis === "sales" ? "💰 کل فروش" : "💼 کل کارمزد"}
+          </p>
           <p className="text-emerald-400 text-xl font-bold">
-            {formatPrice(stats?.total_commission || 0)}
+            {formatPrice(
+              stats?.income_basis === "sales"
+                ? stats?.total_revenue || 0
+                : stats?.total_commission || 0,
+            )}
           </p>
         </div>
         <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 rounded-2xl p-5">

@@ -609,6 +609,14 @@ class BusinessProfile(models.Model):
     telegram = models.CharField(max_length=100, blank=True, verbose_name='تلگرام')
     footer_text = models.CharField(max_length=500, blank=True, verbose_name='متن پاورقی فاکتور')
     tax_id = models.CharField(max_length=50, blank=True, verbose_name='شناسه مالیاتی')
+    # Display/entry money unit. Amounts are STORED in Toman (the app's
+    # historical unit); choosing Rial makes the UI show and accept
+    # amounts ×10 with a ریال label, converting at the edges.
+    currency_unit = models.CharField(
+        max_length=8,
+        choices=[('toman', 'تومان'), ('rial', 'ریال')],
+        default='toman', verbose_name='واحد پول',
+    )
     customer_documents_path = models.CharField(max_length=500, blank=True, default='', verbose_name='مسیر ذخیره‌سازی مدارک مشتریان')
 
     class Meta:
@@ -929,6 +937,9 @@ class BusinessMembership(models.Model):
     ROLE_CHOICES = [
         ('owner', 'مالک'),
         ('manager', 'مدیر'),
+        ('accountant', 'حسابدار'),
+        ('warehouse', 'انباردار'),
+        ('seller', 'فروشنده'),
         ('operator', 'اپراتور'),
         ('viewer', 'مشاهده‌گر'),
     ]
@@ -1145,6 +1156,33 @@ class Product(models.Model):
         max_digits=18, decimal_places=0, default=0,
         verbose_name='قیمت فروش پیش‌فرض',
     )
+    # Professional stock control (phase 2.5): reorder thresholds drive
+    # the low-stock alerts and purchase suggestions; the secondary unit
+    # is a display/purchase convenience (one کارتن = factor × base unit)
+    # while stock itself is always kept in the base unit.
+    min_stock = models.DecimalField(
+        max_digits=14, decimal_places=3, default=0,
+        validators=[MinValueValidator(0)], verbose_name='حداقل موجودی',
+    )
+    reorder_point = models.DecimalField(
+        max_digits=14, decimal_places=3, default=0,
+        validators=[MinValueValidator(0)], verbose_name='نقطه سفارش',
+    )
+    max_stock = models.DecimalField(
+        max_digits=14, decimal_places=3, default=0,
+        validators=[MinValueValidator(0)], verbose_name='حداکثر موجودی',
+    )
+    secondary_unit = models.CharField(
+        max_length=32, blank=True, default='', verbose_name='واحد فرعی',
+    )
+    secondary_factor = models.DecimalField(
+        max_digits=10, decimal_places=3, default=1,
+        validators=[MinValueValidator(Decimal('0.001'))],
+        verbose_name='ضریب تبدیل واحد فرعی',
+    )
+    shelf_location = models.CharField(
+        max_length=128, blank=True, default='', verbose_name='مکان در انبار (قفسه)',
+    )
     is_active = models.BooleanField(default=True, verbose_name='فعال')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -1178,6 +1216,8 @@ class StockMovement(models.Model):
         ('out_return', 'خروج — برگشت به تأمین‌کننده'),
         ('in_adjust', 'ورود — اصلاحی'),
         ('out_adjust', 'خروج — اصلاحی'),
+        ('in_transfer', 'ورود — انتقال از انبار دیگر'),
+        ('out_transfer', 'خروج — انتقال به انبار دیگر'),
     ]
 
     business = models.ForeignKey(
@@ -1195,6 +1235,8 @@ class StockMovement(models.Model):
     kind = models.CharField(max_length=16, choices=KIND_CHOICES, verbose_name='نوع گردش')
     quantity = models.DecimalField(max_digits=14, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))], verbose_name='مقدار')
     unit_cost = models.DecimalField(max_digits=18, decimal_places=0, default=0, verbose_name='بهای واحد')
+    batch_no = models.CharField(max_length=64, blank=True, default='', verbose_name='شماره بچ/سری ساخت')
+    expiry_date = models.DateField(null=True, blank=True, verbose_name='تاریخ انقضا')
     source_type = models.CharField(max_length=32, blank=True, default='', verbose_name='نوع سند مبدأ')
     source_id = models.PositiveIntegerField(null=True, blank=True, verbose_name='شناسهٔ سند مبدأ')
     date = models.DateField(verbose_name='تاریخ')
@@ -1243,6 +1285,17 @@ class PurchaseInvoice(models.Model):
     date = models.DateField(verbose_name='تاریخ')
     description = models.CharField(max_length=500, blank=True, default='', verbose_name='شرح')
     status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='draft', verbose_name='وضعیت')
+    warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.PROTECT, null=True, blank=True,
+        related_name='purchase_invoices', verbose_name='انبار مقصد',
+    )
+    # Landed costs: freight/insurance/etc. on the bill, spread over the
+    # lines by value at posting time so the weighted-average cost is
+    # the real cost of the goods on the shelf.
+    extra_costs = models.DecimalField(
+        max_digits=18, decimal_places=0, default=0,
+        validators=[MinValueValidator(0)], verbose_name='هزینه‌های جانبی خرید',
+    )
     vat_amount = models.DecimalField(max_digits=18, decimal_places=0, default=0, validators=[MinValueValidator(0)], verbose_name='مالیات بر ارزش افزودهٔ خرید')
     journal_entry = models.ForeignKey(
         JournalEntry, on_delete=models.SET_NULL, null=True, blank=True,
@@ -1273,6 +1326,11 @@ class PurchaseInvoice(models.Model):
     def total(self):
         return sum((line.total for line in self.lines.all()), Decimal(0))
 
+    @property
+    def grand_total(self):
+        """Goods total + landed extra costs — what the bill really costs."""
+        return self.total + (self.extra_costs or Decimal(0))
+
 
 class PurchaseLine(models.Model):
     purchase = models.ForeignKey(
@@ -1285,6 +1343,14 @@ class PurchaseLine(models.Model):
     )
     quantity = models.DecimalField(max_digits=14, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))], verbose_name='مقدار')
     unit_price = models.DecimalField(max_digits=18, decimal_places=0, validators=[MinValueValidator(0)], verbose_name='قیمت واحد خرید')
+    batch_no = models.CharField(max_length=64, blank=True, default='', verbose_name='شماره بچ/سری ساخت')
+    expiry_date = models.DateField(null=True, blank=True, verbose_name='تاریخ انقضا')
+    # Filled at posting time: the line's unit cost after spreading the
+    # purchase's extra costs over the lines (the movement's unit_cost).
+    landed_unit_cost = models.DecimalField(
+        max_digits=18, decimal_places=0, default=0,
+        verbose_name='بهای واحد با هزینه‌های جانبی',
+    )
 
     class Meta:
         ordering = ['id']
@@ -1294,6 +1360,165 @@ class PurchaseLine(models.Model):
     @property
     def total(self):
         return self.quantity * self.unit_price
+
+
+class InventorySettings(models.Model):
+    """تنظیمات انبار هر کسب‌وکار (فاز ۲٫۵)."""
+
+    business = models.OneToOneField(
+        Business, on_delete=models.CASCADE, related_name='inventory_settings',
+        verbose_name='کسب‌وکار',
+    )
+    # When on, no document may push a product's stock below zero in the
+    # affected warehouse (sales, transfers, manual out-adjustments).
+    # Off by default: existing installs keep the historical behaviour.
+    block_negative_stock = models.BooleanField(
+        default=False, verbose_name='جلوگیری از موجودی منفی',
+    )
+
+    class Meta:
+        verbose_name = 'تنظیمات انبار'
+        verbose_name_plural = 'تنظیمات انبار'
+
+
+class StockTransfer(models.Model):
+    """حوالهٔ انتقال بین انبارها — خروج از مبدأ و ورود به مقصد با یک سند."""
+
+    STATUS_CHOICES = [
+        ('draft', 'پیش‌نویس'),
+        ('posted', 'ثبت‌شده'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='stock_transfers',
+        verbose_name='کسب‌وکار',
+    )
+    fiscal_year = models.ForeignKey(
+        FiscalYear, on_delete=models.PROTECT, related_name='stock_transfers',
+        verbose_name='سال مالی',
+    )
+    number = models.PositiveIntegerField(verbose_name='شماره حواله')
+    date = models.DateField(verbose_name='تاریخ')
+    from_warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.PROTECT, related_name='transfers_out',
+        verbose_name='انبار مبدأ',
+    )
+    to_warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.PROTECT, related_name='transfers_in',
+        verbose_name='انبار مقصد',
+    )
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='draft', verbose_name='وضعیت')
+    description = models.CharField(max_length=500, blank=True, default='', verbose_name='شرح')
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='stock_transfers', verbose_name='ثبت‌کننده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-number']
+        verbose_name = 'حواله انتقال انبار'
+        verbose_name_plural = 'حواله‌های انتقال انبار'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business', 'fiscal_year', 'number'],
+                name='unique_transfer_number_per_year',
+            ),
+        ]
+
+    def __str__(self):
+        return f'حواله {self.number}: {self.from_warehouse} ← {self.to_warehouse}'
+
+
+class StockTransferLine(models.Model):
+    transfer = models.ForeignKey(
+        StockTransfer, on_delete=models.CASCADE, related_name='lines',
+        verbose_name='حواله',
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name='transfer_lines',
+        verbose_name='کالا',
+    )
+    quantity = models.DecimalField(max_digits=14, decimal_places=3, validators=[MinValueValidator(Decimal('0.001'))], verbose_name='مقدار')
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'سطر حواله'
+        verbose_name_plural = 'سطرهای حواله'
+
+
+class StockCount(models.Model):
+    """انبارگردانی — شمارش فیزیکی یک انبار و سند تعدیل خودکار مغایرت‌ها."""
+
+    STATUS_CHOICES = [
+        ('draft', 'در حال شمارش'),
+        ('applied', 'اعمال‌شده'),
+    ]
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='stock_counts',
+        verbose_name='کسب‌وکار',
+    )
+    fiscal_year = models.ForeignKey(
+        FiscalYear, on_delete=models.PROTECT, related_name='stock_counts',
+        verbose_name='سال مالی',
+    )
+    number = models.PositiveIntegerField(verbose_name='شماره انبارگردانی')
+    date = models.DateField(verbose_name='تاریخ')
+    warehouse = models.ForeignKey(
+        Warehouse, on_delete=models.PROTECT, related_name='stock_counts',
+        verbose_name='انبار',
+    )
+    status = models.CharField(max_length=8, choices=STATUS_CHOICES, default='draft', verbose_name='وضعیت')
+    note = models.CharField(max_length=500, blank=True, default='', verbose_name='توضیح')
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='stock_counts', verbose_name='ثبت‌کننده',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-number']
+        verbose_name = 'انبارگردانی'
+        verbose_name_plural = 'انبارگردانی‌ها'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business', 'fiscal_year', 'number'],
+                name='unique_stock_count_number_per_year',
+            ),
+        ]
+
+    def __str__(self):
+        return f'انبارگردانی {self.number} — {self.warehouse}'
+
+
+class StockCountLine(models.Model):
+    count = models.ForeignKey(
+        StockCount, on_delete=models.CASCADE, related_name='lines',
+        verbose_name='انبارگردانی',
+    )
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name='stock_count_lines',
+        verbose_name='کالا',
+    )
+    system_qty = models.DecimalField(max_digits=14, decimal_places=3, verbose_name='موجودی سیستم')
+    counted_qty = models.DecimalField(
+        max_digits=14, decimal_places=3, null=True, blank=True,
+        validators=[MinValueValidator(0)], verbose_name='مقدار شمارش‌شده',
+    )
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'سطر انبارگردانی'
+        verbose_name_plural = 'سطرهای انبارگردانی'
+
+    @property
+    def variance(self):
+        if self.counted_qty is None:
+            return None
+        return self.counted_qty - self.system_qty
 
 
 # ---------------------------------------------------------------------------

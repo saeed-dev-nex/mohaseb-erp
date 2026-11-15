@@ -189,6 +189,10 @@ const Sidebar = ({
   // intersected. With no business selected the user-level rule alone
   // applies (the pages themselves ask for a selection).
   const businessModules = currentBusiness?.effective_modules ?? null;
+  // Per-trade roles: the caller's role inside this business may narrow
+  // the menu further (a seller sees no accounting, an accountant no
+  // warehouse). my_modules is null for owners/managers (no narrowing).
+  const myModules = currentBusiness?.my_modules ?? null;
   const terminology = currentBusiness?.terminology ?? null;
   const navGroups = [...BASE_NAV_GROUPS, systemGroup]
     .map((group) => ({
@@ -200,6 +204,10 @@ const Sidebar = ({
             !item.module ||
             !businessModules ||
             businessModules.includes(item.module),
+        )
+        .filter(
+          (item) =>
+            !item.module || !myModules || myModules.includes(item.module),
         )
         .map((item) => {
           // Speak the trade's words where the template defines them.

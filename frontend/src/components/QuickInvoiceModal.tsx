@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { formatMoney, currencyLabel } from "../lib/money";
 import {
   BUSINESS_STORAGE_KEY,
   invoicesAPI,
@@ -288,11 +289,10 @@ const ServiceRow = ({
       {/* Line total */}
       <div className="text-left">
         <span className="text-blue-400 text-xs font-medium">
-          {fmt(
+          {formatMoney(
             ((Number(item.main_price) || 0) + (Number(item.extra_price) || 0)) *
               (Number(item.quantity) || 1),
-          )}{" "}
-          تومان
+          )}
         </span>
       </div>
     </div>
@@ -369,6 +369,12 @@ const QuickInvoiceModal = ({
   const { current: currentBusiness } = useBusiness();
   const invoiceProfile = currentBusiness?.invoice_profile;
   const showVehicle = invoiceProfile ? invoiceProfile.vehicle : true;
+  const showPaymentCards = invoiceProfile
+    ? Boolean(invoiceProfile.payment_cards)
+    : true;
+  const showCommission = currentBusiness
+    ? Boolean(currentBusiness.catalog_profile?.commission)
+    : true;
   const profileExtras = invoiceProfile?.extras ?? [];
   const [customFields, setCustomFields] = useState<Record<string, string>>({});
   const [creatingVehicleType, setCreatingVehicleType] = useState(false);
@@ -635,7 +641,7 @@ const QuickInvoiceModal = ({
       setError("حداقل یک ردیف خدمت لازم است");
       return;
     }
-    if (step === 3 && !commissionEntered) {
+    if (step === 3 && showCommission && !commissionEntered) {
       setError("وارد کردن کارمزد الزامی است");
       return;
     }
@@ -660,7 +666,7 @@ const QuickInvoiceModal = ({
       setStep(2);
       return;
     }
-    if (!commissionEntered) {
+    if (showCommission && !commissionEntered) {
       setError("وارد کردن کارمزد الزامی است");
       setStep(3);
       return;
@@ -827,7 +833,7 @@ const QuickInvoiceModal = ({
               <div className="flex justify-between text-sm">
                 <span className="text-slate-400">مبلغ کل</span>
                 <span className="text-white font-semibold">
-                  {fmt(result.invoice?.total_amount)} تومان
+                  {formatMoney(result.invoice?.total_amount)}
                 </span>
               </div>
             </div>
@@ -943,7 +949,7 @@ const QuickInvoiceModal = ({
           {[
             { n: 1, l: showVehicle ? "مشتری و خودرو" : "مشتری" },
             { n: 2, l: currentBusiness?.terminology?.item ?? "خدمات" },
-            { n: 3, l: "کارمزد و توضیحات" },
+            { n: 3, l: showCommission ? "کارمزد و توضیحات" : "توضیحات" },
             { n: 4, l: "وضعیت و ثبت" },
           ].map((s, i) => (
             <React.Fragment key={s.n}>
@@ -1271,37 +1277,39 @@ const QuickInvoiceModal = ({
 
           {step === 3 && (
             <>
-              {/* Commission */}
-              <div
-                data-commission
-                className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-3"
-              >
-                <label className="text-xs text-yellow-400/80 mb-1 block">
-                  💼 کارمزد کلی (اصلی) *
-                </label>
-                {lastCommission > 0 && !commissionEntered && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCommissionTotal(lastCommission);
+              {/* Commission — only for commission-based trades */}
+              {showCommission && (
+                <div
+                  data-commission
+                  className="bg-yellow-500/5 border border-yellow-500/25 rounded-xl p-3"
+                >
+                  <label className="text-xs text-yellow-400/80 mb-1 block">
+                    💼 کارمزد کلی (اصلی) *
+                  </label>
+                  {lastCommission > 0 && !commissionEntered && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCommissionTotal(lastCommission);
+                        setCommissionEntered(true);
+                      }}
+                      className="mb-2 text-[11px] px-2.5 py-1 rounded-lg bg-yellow-500/10 text-yellow-300 border border-yellow-500/25 hover:bg-yellow-500/20 transition-all"
+                    >
+                      💼 استفاده از کارمزد قبلی: {formatMoney(lastCommission)}
+                    </button>
+                  )}
+                  <PriceInput
+                    value={commissionTotal}
+                    onChange={(v) => {
+                      setCommissionTotal(v);
                       setCommissionEntered(true);
                     }}
-                    className="mb-2 text-[11px] px-2.5 py-1 rounded-lg bg-yellow-500/10 text-yellow-300 border border-yellow-500/25 hover:bg-yellow-500/20 transition-all"
-                  >
-                    💼 استفاده از کارمزد قبلی: {fmt(lastCommission)} تومان
-                  </button>
-                )}
-                <PriceInput
-                  value={commissionTotal}
-                  onChange={(v) => {
-                    setCommissionTotal(v);
-                    setCommissionEntered(true);
-                  }}
-                />
-                <p className="text-yellow-500/50 text-[10px] mt-1">
-                  کارمزد به مبلغ کل اضافه می‌شود — وارد کردن آن الزامی است
-                </p>
-              </div>
+                  />
+                  <p className="text-yellow-500/50 text-[10px] mt-1">
+                    کارمزد به مبلغ کل اضافه می‌شود — وارد کردن آن الزامی است
+                  </p>
+                </div>
+              )}
 
               {/* Description */}
               <div>
@@ -1323,32 +1331,34 @@ const QuickInvoiceModal = ({
 
           {step === 4 && (
             <>
-              {/* Payment source */}
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">
-                  کارت پرداخت
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { value: "customer", label: "کارت مشتری" },
-                    { value: "office", label: "کارت دفتر" },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setCardPaymentSource(option.value)}
-                      className={`flex-1 text-xs py-2 rounded-xl border transition-all ${cardPaymentSource === option.value ? "bg-blue-500/20 border-blue-500/40 text-blue-300" : "bg-slate-700/30 border-slate-600/30 text-slate-400"}`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+              {/* Payment source — only for counter-service trades */}
+              {showPaymentCards && (
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">
+                    کارت پرداخت
+                  </label>
+                  <div className="flex gap-2">
+                    {[
+                      { value: "customer", label: "کارت مشتری" },
+                      { value: "office", label: "کارت دفتر" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setCardPaymentSource(option.value)}
+                        className={`flex-1 text-xs py-2 rounded-xl border transition-all ${cardPaymentSource === option.value ? "bg-blue-500/20 border-blue-500/40 text-blue-300" : "bg-slate-700/30 border-slate-600/30 text-slate-400"}`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  {officeCardFee > 0 && (
+                    <p className="text-amber-300 text-[11px] mt-2">
+                      ردیف واریزی خودکار: {formatMoney(officeCardFee)}
+                    </p>
+                  )}
                 </div>
-                {officeCardFee > 0 && (
-                  <p className="text-amber-300 text-[11px] mt-2">
-                    ردیف واریزی خودکار: {fmt(officeCardFee)} تومان
-                  </p>
-                )}
-              </div>
+              )}
 
               {/* Status */}
               <div>
@@ -1381,30 +1391,27 @@ const QuickInvoiceModal = ({
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">جمع خدمات</span>
                   <span className="text-slate-200">
-                    {fmt(subtotal)}{" "}
-                    <span className="text-xs font-normal">تومان</span>
+                    {formatMoney(subtotal)}
                   </span>
                 </div>
                 {officeCardFee > 0 && (
                   <div className="flex justify-between text-sm text-amber-300">
                     <span>واریزی کارت دفتر</span>
-                    <span>+{fmt(officeCardFee)} تومان</span>
+                    <span>+{formatMoney(officeCardFee)}</span>
                   </div>
                 )}
                 {commissionAmt > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-yellow-400/80">💼 کارمزد</span>
                     <span className="text-yellow-400">
-                      +{fmt(commissionAmt)}{" "}
-                      <span className="text-xs font-normal">تومان</span>
+                      +{formatMoney(commissionAmt)}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm font-bold border-t border-slate-600/50 pt-1.5">
                   <span className="text-slate-100">مبلغ کل قابل پرداخت</span>
                   <span className="text-white text-lg">
-                    {fmt(grandTotal)}{" "}
-                    <span className="text-xs font-normal">تومان</span>
+                    {formatMoney(grandTotal)}
                   </span>
                 </div>
               </div>
@@ -1423,8 +1430,7 @@ const QuickInvoiceModal = ({
               </span>
             </span>
             <span className="text-white font-bold text-lg">
-              {fmt(grandTotal)}{" "}
-              <span className="text-xs font-normal">تومان</span>
+              {formatMoney(grandTotal)}
             </span>
           </div>
           <div className="flex gap-3">

@@ -13,8 +13,10 @@ import {
   chatAPI,
   chatSocketProtocols,
   chatSocketURL,
+  profileAPI,
   welcomeAPI,
 } from "../services/api";
+import { setCurrencyUnit } from "../lib/money";
 import api from "../services/api";
 import { setCurrentUser } from "../features/authSlice";
 import { useBusiness } from "../lib/business";
@@ -312,6 +314,14 @@ const Layout = () => {
     api
       .get("users/me/")
       .then((res) => dispatch(setCurrentUser(res.data)))
+      .catch(() => {});
+    // Money unit (تومان/ریال) comes from the stored profile.
+    profileAPI
+      .get()
+      .then(({ data }) => {
+        const profile = Array.isArray(data) ? data[0] : data;
+        setCurrencyUnit(profile?.currency_unit);
+      })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -19,6 +19,7 @@ from django.db import IntegrityError
 from django.http import HttpResponse
 
 from ..models import EmploymentProfile, PayrollPeriod, Payslip
+from .common import HasBusinessModuleAccess
 from ..serializers import (
     EmploymentProfileSerializer, PayrollPeriodSerializer,
     PayrollSettingsSerializer, PayslipSerializer,
@@ -32,7 +33,8 @@ from .accounting import _require_business, _require_write
 
 class EmploymentProfileViewSet(viewsets.ModelViewSet):
     serializer_class = EmploymentProfileSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'payroll'
     pagination_class = None
 
     def get_queryset(self):
@@ -57,7 +59,9 @@ class EmploymentProfileViewSet(viewsets.ModelViewSet):
 class PayrollSettingsView(APIView):
     """GET/PATCH /api/payroll/settings/ — rates and tax brackets."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+
+    module_name = 'payroll'
 
     def get(self, request):
         business = _require_business(request)
@@ -75,7 +79,8 @@ class PayrollSettingsView(APIView):
 
 class PayrollPeriodViewSet(viewsets.ModelViewSet):
     serializer_class = PayrollPeriodSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'payroll'
 
     def get_queryset(self):
         business = _require_business(self.request)
@@ -187,7 +192,8 @@ class PayslipViewSet(viewsets.ModelViewSet):
     """Payslip reads + input edits (days/overtime/extras) with recompute."""
 
     serializer_class = PayslipSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, HasBusinessModuleAccess]
+    module_name = 'payroll'
     http_method_names = ['get', 'patch', 'head', 'options']
 
     def get_queryset(self):

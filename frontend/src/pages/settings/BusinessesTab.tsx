@@ -14,6 +14,9 @@ const faNum = (value: number) => value.toLocaleString("fa-IR");
 const ROLE_LABELS: Record<string, string> = {
   owner: "مالک",
   manager: "مدیر",
+  accountant: "حسابدار",
+  warehouse: "انباردار",
+  seller: "فروشنده",
   operator: "اپراتور",
   viewer: "مشاهده‌گر",
 };
@@ -78,6 +81,22 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
   }, [loadBusinesses]);
 
   const selected = businesses.find((b) => b.id === selectedId) ?? null;
+
+  // The member role must belong to the selected business's trade:
+  // when the business changes, fall back to its everyday role
+  // (فروشنده for shops, اپراتور for service trades).
+  useEffect(() => {
+    if (!selected) return;
+    const presets = selected.role_presets ?? [];
+    const allowed = ["owner", ...presets.map((p) => p.key)];
+    if (!allowed.includes(memberForm.role)) {
+      const everyday =
+        presets.find((p) => p.key === "seller" || p.key === "operator") ??
+        presets[0];
+      if (everyday) setMemberForm((f) => ({ ...f, role: everyday.key }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, businesses]);
 
   const [identityForm, setIdentityForm] = useState({
     name: "",
@@ -629,7 +648,7 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
                   }
                 />
               </F>
-              <F label="نقش">
+              <F label="نقش در این کسب‌وکار">
                 <select
                   className={inp}
                   value={memberForm.role}
@@ -638,10 +657,25 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
                   }
                 >
                   <option value="owner">مالک</option>
-                  <option value="manager">مدیر</option>
-                  <option value="operator">اپراتور</option>
-                  <option value="viewer">مشاهده‌گر</option>
+                  {(selected?.role_presets ?? []).map((preset) => (
+                    <option key={preset.key} value={preset.key}>
+                      {preset.label}
+                    </option>
+                  ))}
+                  {!selected?.role_presets?.length && (
+                    <>
+                      <option value="manager">مدیر</option>
+                      <option value="operator">اپراتور</option>
+                      <option value="viewer">مشاهده‌گر</option>
+                    </>
+                  )}
                 </select>
+                <p className="mt-1 text-[11px] leading-5 text-slate-500">
+                  نقش‌ها بر اساس نوع شغل این کسب‌وکارند؛ هر نقش فقط به بخش‌های
+                  مربوط به مسئولیت خودش دسترسی دارد (مثلاً فروشنده حسابداری را
+                  نمی‌بیند و حسابدار به انبار دسترسی ندارد)، ولی ثبت‌های خودکار
+                  پس‌زمینه (سند فروش و خروج انبار) همیشه انجام می‌شود.
+                </p>
               </F>
               <div className="flex items-end">
                 <button

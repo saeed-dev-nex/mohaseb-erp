@@ -19,9 +19,11 @@ from .money import payment_totals, safe_spreadsheet_cell
 METHOD_LABELS = dict(InvoicePayment.METHOD_CHOICES)
 
 
-def _filter_invoices(date_from='', date_to='', status_filter='', customer_search=''):
+def _filter_invoices(date_from='', date_to='', status_filter='', customer_search='', business=None):
     qs = Invoice.objects.select_related('customer', 'created_by', 'paid_by').prefetch_related(
         'payments__created_by', 'items__service', 'edit_requests').all()
+    if business is not None:
+        qs = qs.filter(business=business)
     if date_from:
         qs = qs.filter(date__date__gte=date_from)
     if date_to:
@@ -56,9 +58,20 @@ def _paid_amount_with_legacy_fallback(invoice, paid_amounts):
     return payment_totals(invoice.final_amount, invoice.status, paid_amounts.get(invoice.id, 0))[0]
 
 
-def build_report_data(date_from='', date_to='', status_filter='', customer_search=''):
-    """Return (report_dict_without_invoice_rows, invoice_rows)."""
-    invoice_rows = list(_filter_invoices(date_from, date_to, status_filter, customer_search))
+def build_report_data(date_from='', date_to='', status_filter='', customer_search='', business=None):
+    """Return (report_dict_without_invoice_rows, invoice_rows).
+
+    With a business context, «درآمد» follows the trade (see
+    template_income_basis): commission trades earn their commission,
+    selling trades earn the sale — and net profit builds on that
+    income instead of always on commission.
+    """
+    from ..business_templates import template_income_basis
+
+    income_basis = (
+        template_income_basis(business.template_key) if business is not None else 'commission'
+    )
+    invoice_rows = list(_filter_invoices(date_from, date_to, status_filter, customer_search, business=business))
     invoice_ids = [invoice.id for invoice in invoice_rows]
     paid_amounts = _paid_amounts(invoice_ids)
 
@@ -81,7 +94,7 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
         title = row['service_title_snapshot'] or row['service__title'] or 'سایر'
         service_totals[title] = service_totals.get(title, 0) + int(row['total'] or 0)
 
-    total_revenue = total_commission = pending_amount = invoice_amount = 0
+    total_revenue = total_commission = total_income = pending_amount = invoice_amount = 0
     by_month, customer_totals = {}, {}
     by_status = {key: {'label': label, 'count': 0, 'amount': 0} for key, label in Invoice.STATUS_CHOICES}
     for invoice in invoice_rows:
@@ -90,6 +103,9 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
         total_revenue += paid_total
         if invoice.status == 'paid' or invoice.commission_paid:
             total_commission += int(invoice.commission_total)
+            total_income += (
+                int(invoice.commission_total) if income_basis == 'commission' else final
+            )
         if invoice.status == 'pending':
             pending_amount += payment_totals(invoice.final_amount, invoice.status, paid_amounts.get(invoice.id, 0))[1]
         if invoice.status != 'cancelled':
@@ -134,7 +150,9 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
         'total_count': len(invoice_rows),
         'invoice_amount': invoice_amount,
         'expense_total': int(expense_total),
-        'net_profit': int(total_commission - expense_total),
+        'total_income': int(total_income),
+        'income_basis': income_basis,
+        'net_profit': int(total_income - expense_total),
         'by_status': by_status,
         'monthly': [{'month': month, **values, 'received': int(values['received'])} for month, values in sorted(by_month.items())],
         'top_customers': sorted(customer_totals.values(), key=lambda item: item['amount'], reverse=True)[:10],
@@ -154,11 +172,11 @@ def build_report_data(date_from='', date_to='', status_filter='', customer_searc
     return data, invoice_rows
 
 
-def build_excel_bytes(date_from='', date_to='', status_filter='', customer_search=''):
+def build_excel_bytes(date_from='', date_to='', status_filter='', customer_search='', business=None):
     """A real .xlsx workbook (openpyxl) with the historical sheet layout."""
     from openpyxl import Workbook
 
-    invoice_rows = list(_filter_invoices(date_from, date_to, status_filter, customer_search))
+    invoice_rows = list(_filter_invoices(date_from, date_to, status_filter, customer_search, business=business))
     expense_rows = list(_filter_expenses(date_from, date_to).order_by('-date'))
     invoice_ids = [invoice.id for invoice in invoice_rows]
     paid_sums = _paid_amounts(invoice_ids)
