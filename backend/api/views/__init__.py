@@ -19,8 +19,8 @@ from .backup import BackupConfigViewSet, BackupViewSet
 from .app_update import AppUpdateViewSet
 from .businesses import BusinessTemplateListView, BusinessViewSet
 from .inventory import (
-    InventoryAlertsView, InventorySettingsView, KardexView, ProductViewSet,
-    PurchaseInvoiceViewSet, StockAdjustView, StockCountViewSet,
+    InventoryAlertsView, InventorySettingsView, KardexView, ProductCategoryViewSet,
+    ProductViewSet, PurchaseInvoiceViewSet, StockAdjustView, StockCountViewSet,
     StockTransferViewSet, WarehouseViewSet,
 )
 from .payroll import (

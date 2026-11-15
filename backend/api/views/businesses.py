@@ -22,7 +22,7 @@ from ..models import Business, BusinessMembership
 from ..serializers import (
     BusinessMembershipSerializer, BusinessSerializer, FiscalYearSerializer,
 )
-from ..services.business_setup import create_default_fiscal_year, seed_template_catalog
+from ..services.business_setup import create_default_fiscal_year, seed_template_catalog, seed_template_categories
 from ..services.accounting import seed_standard_chart
 from ..services.legacy_import import import_legacy_backup
 from ..services.inventory import get_default_warehouse
@@ -84,6 +84,7 @@ class BusinessViewSet(viewsets.ModelViewSet):
         )
         create_default_fiscal_year(business)
         seed_template_catalog(business)
+        seed_template_categories(business)
         seed_standard_chart(business)
         get_default_warehouse(business)
         return Response(

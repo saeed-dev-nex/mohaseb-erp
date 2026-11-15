@@ -1137,6 +1137,43 @@ class Warehouse(models.Model):
         return self.name
 
 
+class ProductCategory(models.Model):
+    """دسته‌بندی کالا — درخت آزاد در هر کسب‌وکار؛ گرهٔ میانی می‌تواند
+    گروه (نوشیدنی‌ها) و برگ‌ها برند (کوکاکولا) باشند."""
+
+    business = models.ForeignKey(
+        Business, on_delete=models.PROTECT, related_name='product_categories',
+        verbose_name='کسب‌وکار',
+    )
+    name = models.CharField(max_length=128, verbose_name='نام دسته')
+    parent = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='children', verbose_name='دستهٔ والد',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'دسته‌بندی کالا'
+        verbose_name_plural = 'دسته‌بندی‌های کالا'
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def path(self):
+        """مسیر کامل از ریشه: «نوشیدنی‌ها ← نوشابه گازدار ← کوکاکولا»."""
+        names = [self.name]
+        node = self.parent
+        seen = set()
+        while node is not None and node.pk not in seen:
+            seen.add(node.pk)
+            names.append(node.name)
+            node = node.parent
+        return ' ← '.join(reversed(names))
+
+
 class Product(models.Model):
     """کالا — با کد یکتا در هر کسب‌وکار و بهای میانگین موزون."""
 
@@ -1182,6 +1219,10 @@ class Product(models.Model):
     )
     shelf_location = models.CharField(
         max_length=128, blank=True, default='', verbose_name='مکان در انبار (قفسه)',
+    )
+    category = models.ForeignKey(
+        ProductCategory, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='products', verbose_name='دسته‌بندی',
     )
     is_active = models.BooleanField(default=True, verbose_name='فعال')
     created_at = models.DateTimeField(auto_now_add=True)

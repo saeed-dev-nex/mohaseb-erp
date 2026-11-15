@@ -5,11 +5,13 @@ import {
   type InventoryAlerts,
   type InventorySettings,
   type Product,
+  type ProductCategory,
   type PurchaseInvoice,
   type StockCount,
   type StockTransfer,
   type Warehouse,
 } from "../services/api";
+import { flattenCategories } from "../components/CategoryManager";
 import { useBusiness } from "../lib/business";
 import JalaliDatePicker from "../components/JalaliDatePicker";
 import { toJalali } from "../utils/persian";
@@ -44,6 +46,8 @@ export default function InventoryPage() {
   const { current } = useBusiness();
   const [tab, setTab] = useState<Tab>("products");
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
   const [purchases, setPurchases] = useState<PurchaseInvoice[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
@@ -139,6 +143,10 @@ export default function InventoryPage() {
         inventoryAPI.inventorySettings(),
       ]);
       setProducts(productsRes.data);
+      inventoryAPI
+        .categories()
+        .then((res) => setCategories(res.data))
+        .catch(() => {});
       setWarehouses(warehousesRes.data);
       setTransfers(transfersRes.data);
       setCounts(countsRes.data);
@@ -601,6 +609,28 @@ export default function InventoryPage() {
             <Button type="button" variant="outline" onClick={createWarehouse}>
               + ساخت انبار
             </Button>
+            {categories.length > 0 && (
+              <>
+                <span className="text-slate-400 mr-3">دسته‌بندی:</span>
+                <select
+                  className={`${inp} !w-56`}
+                  value={categoryFilter ?? ""}
+                  onChange={(e) =>
+                    setCategoryFilter(
+                      e.target.value ? Number(e.target.value) : null,
+                    )
+                  }
+                >
+                  <option value="">همهٔ کالاها</option>
+                  {flattenCategories(categories).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {" ".repeat(c.depth)}
+                      {c.path}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
           </div>
           <div className="overflow-x-auto mb-5">
             <table className="w-full text-sm">
@@ -618,42 +648,63 @@ export default function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {products.map((p) => {
-                  const low =
-                    Number(p.reorder_point) > 0 &&
-                    Number(p.current_stock) <= Number(p.reorder_point);
-                  return (
-                    <tr
-                      key={p.id}
-                      className="border-b border-slate-800 text-slate-200"
-                    >
-                      <td className="py-2 px-2 font-mono text-slate-400">
-                        {p.code}
-                      </td>
-                      <td className="py-2 px-2">{p.name}</td>
-                      <td className="py-2 px-2">
-                        {p.unit}
-                        {p.secondary_unit
-                          ? ` (هر ${p.secondary_unit} = ${fmt(p.secondary_factor)})`
-                          : ""}
-                      </td>
-                      <td className="py-2 px-2">{p.shelf_location || "—"}</td>
-                      <td className="py-2 px-2">{fmt(p.current_stock)}</td>
-                      <td className="py-2 px-2">{fmt(p.average_cost)}</td>
-                      <td className="py-2 px-2">{fmt(p.stock_value)}</td>
-                      <td className="py-2 px-2">{fmt(p.sale_price)}</td>
-                      <td className="py-2 px-2">
-                        {low ? (
-                          <span className="text-amber-300">
-                            ⚠ رسیده به نقطه سفارش
-                          </span>
-                        ) : (
-                          <span className="text-slate-500">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {products
+                  .filter((p) => {
+                    if (!categoryFilter) return true;
+                    if (!p.category) return false;
+                    const byId = new Map(categories.map((c) => [c.id, c]));
+                    let node = byId.get(p.category);
+                    const seen = new Set<number>();
+                    while (node && !seen.has(node.id)) {
+                      if (node.id === categoryFilter) return true;
+                      seen.add(node.id);
+                      node = node.parent ? byId.get(node.parent) : undefined;
+                    }
+                    return false;
+                  })
+                  .map((p) => {
+                    const low =
+                      Number(p.reorder_point) > 0 &&
+                      Number(p.current_stock) <= Number(p.reorder_point);
+                    return (
+                      <tr
+                        key={p.id}
+                        className="border-b border-slate-800 text-slate-200"
+                      >
+                        <td className="py-2 px-2 font-mono text-slate-400">
+                          {p.code}
+                        </td>
+                        <td className="py-2 px-2">
+                          {p.name}
+                          {p.category_path && (
+                            <span className="mt-0.5 block text-[11px] text-sky-300/80">
+                              🏷️ {p.category_path}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 px-2">
+                          {p.unit}
+                          {p.secondary_unit
+                            ? ` (هر ${p.secondary_unit} = ${fmt(p.secondary_factor)})`
+                            : ""}
+                        </td>
+                        <td className="py-2 px-2">{p.shelf_location || "—"}</td>
+                        <td className="py-2 px-2">{fmt(p.current_stock)}</td>
+                        <td className="py-2 px-2">{fmt(p.average_cost)}</td>
+                        <td className="py-2 px-2">{fmt(p.stock_value)}</td>
+                        <td className="py-2 px-2">{fmt(p.sale_price)}</td>
+                        <td className="py-2 px-2">
+                          {low ? (
+                            <span className="text-amber-300">
+                              ⚠ رسیده به نقطه سفارش
+                            </span>
+                          ) : (
+                            <span className="text-slate-500">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

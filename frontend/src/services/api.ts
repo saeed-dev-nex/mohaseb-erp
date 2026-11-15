@@ -635,6 +635,9 @@ export interface Product {
   average_cost: number;
   sale_price: number;
   is_active: boolean;
+  category: number | null;
+  category_name?: string;
+  category_path?: string;
   min_stock: number;
   reorder_point: number;
   max_stock: number;
@@ -643,6 +646,16 @@ export interface Product {
   shelf_location: string;
   current_stock: number;
   stock_value: number;
+}
+
+export interface ProductCategory {
+  id: number;
+  business: number;
+  name: string;
+  parent: number | null;
+  path: string;
+  children_count: number;
+  products_count: number;
 }
 
 export interface PurchaseLine {
@@ -768,12 +781,22 @@ export const inventoryAPI = {
   warehouses: () => api.get<Warehouse[]>("warehouses/"),
   createWarehouse: (data: Partial<Warehouse>) =>
     api.post<Warehouse>("warehouses/", data),
-  products: () => api.get<Product[]>("products/"),
+  products: (params?: { category?: number }) =>
+    api.get<Product[]>("products/", { params }),
   createProduct: (data: Partial<Product>) =>
     api.post<Product>("products/", data),
   updateProduct: (id: number, data: Partial<Product>) =>
     api.patch<Product>(`products/${id}/`, data),
   deleteProduct: (id: number) => api.delete(`products/${id}/`),
+  categories: () => api.get<ProductCategory[]>("product-categories/"),
+  createCategory: (data: { name: string; parent?: number | null }) =>
+    api.post<ProductCategory>("product-categories/", data),
+  updateCategory: (
+    id: number,
+    data: { name?: string; parent?: number | null },
+  ) => api.patch<ProductCategory>(`product-categories/${id}/`, data),
+  deleteCategory: (id: number) => api.delete(`product-categories/${id}/`),
+  seedCategories: () => api.post("product-categories/seed-defaults/", {}),
   purchases: () => api.get("purchases/"),
   createPurchase: (data: Payload) =>
     api.post<PurchaseInvoice>("purchases/", data),
