@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { usersAPI } from "../services/api";
+import { businessesAPI, usersAPI } from "../services/api";
+import type { Business } from "../services/api";
+import { useBusiness } from "../lib/business";
+import { formatApiError } from "../utils/apiError";
 import { ALL_MODULES, MODULE_LABELS, ceilingFor } from "../utils/modules";
 import PasswordInput from "../components/PasswordInput";
 import type { ModuleName } from "../utils/modules";
@@ -73,6 +76,375 @@ const emptyForm: UserForm = {
 const blankAccess = (): ModuleAccessMap =>
   Object.fromEntries(ALL_MODULES.map((m) => [m, true])) as ModuleAccessMap;
 
+type MemberRow = {
+  id: number;
+  user: number;
+  username: string;
+  role: string;
+  is_default: boolean;
+  created_at?: string | null;
+};
+
+const OWNER_CARD = {
+  key: "owner",
+  label: "مالک",
+  description:
+    "مالک کسب‌وکار؛ به همهٔ بخش‌ها دسترسی دارد و اعضا را مدیریت می‌کند. عضویت مالک قابل حذف نیست.",
+  modules: null as string[] | null,
+};
+
+const TRADE_INTRO: Record<string, string> = {
+  product:
+    "این کسب‌وکار کالایی است و نقش‌ها بر اساس کار فروشگاه چیده شده‌اند: فروشنده فاکتور می‌زند، انباردار موجودی را نگه می‌دارد و حسابدار سندها را می‌بندد؛ هیچ‌کدام بخش دیگری را نمی‌بینند، ولی ثبت‌های پس‌زمینه (سند فروش و خروج انبار) خودکار انجام می‌شود.",
+  service:
+    "این کسب‌وکار خدماتی است و نقش‌ها بر اساس کار دفتر چیده شده‌اند: اپراتور سفارش و فاکتور مراجعان را ثبت می‌کند و حسابدار سندها و گزارش‌های مالی را می‌بندد؛ هر کس فقط بخش خودش را می‌بیند، ولی ثبت‌های پس‌زمینه (سند حسابداری فروش) خودکار انجام می‌شود.",
+};
+
+/**
+ * Members of the currently selected business: who belongs, with which
+ * per-trade role, plus the role guide for this business's trade. This
+ * panel replaced the members section of Settings → Businesses.
+ */
+function BusinessMembersPanel({
+  business,
+  canManage,
+  isAdmin,
+  currentUserId,
+  onCreateAccount,
+}: {
+  business: Business;
+  canManage: boolean;
+  isAdmin: boolean;
+  currentUserId?: number;
+  onCreateAccount?: () => void;
+}) {
+  const presets = business.role_presets ?? [];
+  const roleOptions = [OWNER_CARD, ...presets];
+  const everydayRole =
+    presets.find((p) => p.key === "seller" || p.key === "operator")?.key ??
+    presets[0]?.key ??
+    "manager";
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
+  const [panelError, setPanelError] = useState("");
+  const [form, setForm] = useState({ username: "", role: everydayRole });
+  const [adding, setAdding] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<MemberRow | null>(null);
+
+  const loadMembers = useCallback(async () => {
+    setLoadingMembers(true);
+    try {
+      const { data } = await businessesAPI.members(business.id);
+      setMembers(data as MemberRow[]);
+    } catch {
+      setPanelError("دریافت اعضای کسب‌وکار انجام نشد.");
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, [business.id]);
+
+  useEffect(() => {
+    void loadMembers();
+  }, [loadMembers]);
+
+  useEffect(() => {
+    setForm({ username: "", role: everydayRole });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [business.id]);
+
+  const roleInfo = (key: string) => roleOptions.find((r) => r.key === key);
+  const selectedRole = roleInfo(form.role);
+
+  const addMember = async () => {
+    if (!form.username.trim()) return;
+    setAdding(true);
+    setPanelError("");
+    try {
+      await businessesAPI.addMember(business.id, {
+        username: form.username.trim(),
+        role: form.role,
+      });
+      setForm((f) => ({ ...f, username: "" }));
+      await loadMembers();
+    } catch (e) {
+      setPanelError(
+        formatApiError(
+          e,
+          "افزودن عضو انجام نشد. نام کاربری باید دقیقاً نام یک حساب موجود باشد.",
+        ),
+      );
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const changeRole = async (member: MemberRow, role: string) => {
+    setPanelError("");
+    try {
+      await businessesAPI.addMember(business.id, {
+        username: member.username,
+        role,
+      });
+      await loadMembers();
+    } catch (e) {
+      setPanelError(formatApiError(e, "تغییر نقش عضو انجام نشد."));
+    }
+  };
+
+  const removeMember = async () => {
+    if (!removeTarget) return;
+    setPanelError("");
+    try {
+      await businessesAPI.removeMember(business.id, removeTarget.user);
+      setRemoveTarget(null);
+      await loadMembers();
+    } catch (e) {
+      setRemoveTarget(null);
+      setPanelError(formatApiError(e, "حذف عضو انجام نشد."));
+    }
+  };
+
+  const moduleChips = (modules: string[] | null) =>
+    modules === null ? (
+      <span className="px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 text-[11px]">
+        همهٔ بخش‌های کسب‌وکار
+      </span>
+    ) : (
+      modules.map((m) => (
+        <span
+          key={m}
+          className="px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300 text-[11px]"
+        >
+          {MODULE_LABELS[m as ModuleName] ?? m}
+        </span>
+      ))
+    );
+
+  return (
+    <div className="space-y-6">
+      <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-sm text-blue-200 leading-7">
+        {TRADE_INTRO[business.catalog_profile?.kind ?? ""] ??
+          "نقش‌های این کسب‌وکار بر اساس نوع شغل آن تعریف شده‌اند؛ هر نقش فقط بخش‌های مربوط به مسئولیت خودش را می‌بیند."}
+      </div>
+
+      {/* Role guide for this trade */}
+      <div>
+        <h3 className="text-white font-bold mb-3">
+          نقش‌های شغل «{business.template_title}»
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {roleOptions.map((role) => (
+            <div
+              key={role.key}
+              className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-2xl space-y-2"
+            >
+              <p className="text-white font-semibold text-sm">{role.label}</p>
+              <p className="text-slate-400 text-xs leading-6">
+                {role.description}
+              </p>
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {moduleChips(role.modules)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {panelError && (
+        <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
+          {panelError}
+        </div>
+      )}
+
+      {/* Members list */}
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div className="px-4 py-3.5 bg-slate-700/30 border-b border-slate-700/50 text-slate-300 font-medium text-sm">
+          اعضای «{business.name}»
+        </div>
+        {loadingMembers ? (
+          <div className="flex justify-center py-10">
+            <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : members.length === 0 ? (
+          <p className="text-center text-slate-500 py-10 text-sm">
+            هنوز عضوی ثبت نشده است
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-700/30">
+            {members.map((member) => {
+              const info = roleInfo(member.role);
+              const isMe = member.user === currentUserId;
+              return (
+                <div
+                  key={member.id}
+                  className="flex flex-wrap items-center gap-3 px-4 py-3"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-white font-bold text-sm border border-slate-600">
+                    {(member.username[0] || "?").toUpperCase()}
+                  </div>
+                  <div className="min-w-32">
+                    <p className="text-white text-sm font-medium flex items-center gap-2">
+                      {member.username}
+                      {isMe && (
+                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] rounded-full border border-blue-500/30">
+                          شما
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-slate-500 text-xs">
+                      {info?.label ?? member.role}
+                      {member.is_default && " · کسب‌وکار پیش‌فرض او"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 ms-auto">
+                    {canManage && member.role !== "owner" ? (
+                      <select
+                        value={member.role}
+                        onChange={(e) =>
+                          void changeRole(member, e.target.value)
+                        }
+                        className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 text-xs outline-none"
+                        title="تغییر نقش"
+                      >
+                        {roleOptions.map((r) => (
+                          <option key={r.key} value={r.key}>
+                            {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="px-3 py-1 rounded-full text-xs font-medium border bg-slate-700/40 text-slate-300 border-slate-600/50">
+                        {info?.label ?? member.role}
+                      </span>
+                    )}
+                    {isAdmin && (
+                      <Link
+                        to={`/users/${member.user}/performance`}
+                        className="px-3 py-1.5 bg-slate-700/50 hover:bg-violet-500/20 text-slate-300 hover:text-violet-300 rounded-lg text-xs font-medium transition-all border border-slate-600/50 hover:border-violet-500/30"
+                      >
+                        📊 عملکرد
+                      </Link>
+                    )}
+                    {canManage && member.role !== "owner" && (
+                      <button
+                        onClick={() => setRemoveTarget(member)}
+                        className="px-3 py-1.5 bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-300 rounded-lg text-xs font-medium transition-all border border-slate-600/50 hover:border-red-500/30"
+                      >
+                        حذف از کسب‌وکار
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add member */}
+      {canManage && (
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 space-y-3">
+          <p className="text-white font-semibold text-sm">افزودن عضو</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">
+                نام کاربری
+              </label>
+              <input
+                value={form.username}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, username: e.target.value }))
+                }
+                className="w-full px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="نام کاربری حساب موجود"
+                dir="ltr"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1.5">
+                نقش در این کسب‌وکار
+              </label>
+              <select
+                value={form.role}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, role: e.target.value }))
+                }
+                className="w-full px-3 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white text-sm outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                {roleOptions.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => void addMember()}
+                disabled={!form.username.trim() || adding}
+                className="w-full py-2.5 bg-gradient-to-l from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-40 text-white rounded-xl font-medium text-sm transition-all"
+              >
+                {adding ? "در حال افزودن…" : "افزودن عضو"}
+              </button>
+            </div>
+          </div>
+          {selectedRole?.description && (
+            <p className="text-slate-400 text-xs leading-6 bg-slate-900/40 border border-slate-700/50 rounded-xl px-3 py-2">
+              <strong className="text-slate-200">{selectedRole.label}:</strong>{" "}
+              {selectedRole.description}
+            </p>
+          )}
+          <p className="text-slate-500 text-xs leading-6">
+            عضو باید از قبل حساب کاربری داشته باشد؛ اگر ندارد،{" "}
+            {isAdmin && onCreateAccount ? (
+              <button
+                onClick={onCreateAccount}
+                className="text-blue-400 hover:text-blue-300"
+              >
+                اول یک حساب جدید بسازید
+              </button>
+            ) : (
+              "ساخت حساب با مدیر ارشد سیستم است"
+            )}{" "}
+            و بعد او را اینجا با نقش مناسب به این کسب‌وکار اضافه کنید. یک نفر
+            می‌تواند در چند کسب‌وکار با نقش‌های متفاوت عضو باشد.
+          </p>
+        </div>
+      )}
+
+      {/* Remove confirm */}
+      {removeTarget && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+            <div className="text-4xl mb-4">⚠️</div>
+            <h3 className="text-lg font-bold text-white mb-2">
+              حذف از کسب‌وکار
+            </h3>
+            <p className="text-slate-400 text-sm mb-6">
+              «{removeTarget.username}» از اعضای «{business.name}» حذف شود؟ حساب
+              کاربری او باقی می‌ماند و فقط دسترسی‌اش به این کسب‌وکار قطع می‌شود.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => void removeMember()}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium text-sm transition-colors"
+              >
+                بله، حذف شود
+              </button>
+              <button
+                onClick={() => setRemoveTarget(null)}
+                className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl font-medium text-sm transition-colors"
+              >
+                انصراف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UsersPage() {
   const currentUser = useSelector((s: any) => s.auth.currentUser);
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -89,8 +461,19 @@ export default function UsersPage() {
   const [accessMode, setAccessMode] = useState("default");
 
   const isAdmin = currentUser?.is_superuser;
+  const { current: currentBusiness } = useBusiness();
+  const myRole = currentBusiness?.my_role ?? null;
+  const isBusinessMember = Boolean(myRole);
+  const canManageBusiness =
+    Boolean(isAdmin) || myRole === "owner" || myRole === "manager";
 
   const load = async () => {
+    if (!currentUser?.is_superuser) {
+      // The system-accounts list is superuser-only; business managers
+      // work in the members panel above instead.
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -217,14 +600,14 @@ export default function UsersPage() {
     } catch (_) {}
   };
 
-  if (!isAdmin) {
+  if (!isAdmin && !isBusinessMember) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center p-12 bg-slate-800/50 rounded-2xl border border-slate-700">
           <div className="text-5xl mb-4">🔒</div>
           <h2 className="text-xl font-bold text-white mb-2">دسترسی محدود</h2>
           <p className="text-slate-400">
-            فقط مدیر ارشد می‌تواند کاربران را مدیریت کند.
+            مدیریت کاربران و اعضا برای مدیر کسب‌وکار و مدیر ارشد سیستم است.
           </p>
         </div>
       </div>
@@ -233,494 +616,538 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6" dir="rtl">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-white">🔐 مدیریت کاربران</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            تعریف کارمند با نام کاربری و رمز ورود اختصاصی برای نظارت بر رفتار
-            کارکنان
-          </p>
-        </div>
-        <Button variant="primary" onClick={openCreate}>
-          + کاربر جدید
-        </Button>
+      {/* Page header — follows the selected business and its trade */}
+      <div>
+        <h2 className="text-2xl font-bold text-white">
+          🔐 کاربران و دسترسی‌ها
+        </h2>
+        <p className="text-slate-400 text-sm mt-1">
+          {currentBusiness
+            ? `اعضای «${currentBusiness.name}» با نقش‌های شغل ${currentBusiness.template_title}؛ هر کس فقط بخش خودش را می‌بیند.`
+            : "برای مدیریت اعضا، یک کسب‌وکار را از بالای صفحه انتخاب کنید."}
+        </p>
       </div>
 
-      {/* Error */}
-      {error && (
-        <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
-          {error}
-        </div>
+      {currentBusiness && isBusinessMember ? (
+        <BusinessMembersPanel
+          business={currentBusiness}
+          canManage={canManageBusiness}
+          isAdmin={Boolean(isAdmin)}
+          currentUserId={currentUser?.id}
+          onCreateAccount={isAdmin ? openCreate : undefined}
+        />
+      ) : (
+        !currentBusiness && (
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-sm text-amber-200">
+            کسب‌وکاری انتخاب نشده است؛ مدیریت اعضا برای هر کسب‌وکار جدا و بر
+            اساس شغل همان کسب‌وکار انجام می‌شود.
+          </div>
+        )
       )}
 
-      {/* Info box */}
-      <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-sm text-blue-300 flex gap-3 items-start">
-        <span className="text-lg mt-0.5">ℹ️</span>
-        <div>
-          <p className="font-semibold mb-1">راهنمای سطوح دسترسی</p>
-          <p>
-            👤 <strong>اپراتور:</strong> می‌تواند فاکتور صادر کند و مشتریان را
-            مدیریت کند
-          </p>
-          <p>
-            🔑 <strong>مدیر:</strong> دسترسی به همه بخش‌ها + مدیریت هزینه‌ها و
-            گزارشات
-          </p>
-          <p>
-            👑 <strong>مدیر ارشد:</strong> کنترل کامل شامل مدیریت کاربران و
-            تنظیمات سیستم
-          </p>
-        </div>
-      </div>
+      {isAdmin && (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between pt-4 border-t border-slate-700/50">
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                حساب‌های کاربری سیستم
+              </h2>
+              <p className="text-slate-400 text-sm mt-1">
+                حساب ورود هر شخص همین‌جا ساخته می‌شود؛ این‌که در کدام کسب‌وکار
+                چه نقشی دارد، در بخش اعضای همان کسب‌وکار (بالا) تعیین می‌شود.
+              </p>
+            </div>
+            <Button variant="primary" onClick={openCreate}>
+              + کاربر جدید
+            </Button>
+          </div>
+        </>
+      )}
+      {isAdmin && (
+        <>
+          {/* Error */}
+          {error && (
+            <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
+              {error}
+            </div>
+          )}
 
-      {/* Users Table */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : (
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-slate-700/30 text-slate-400 border-b border-slate-700/50">
-                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
-                  کاربر
-                </th>
-                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
-                  نام کاربری
-                </th>
-                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
-                  سطح دسترسی
-                </th>
-                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
-                  وضعیت
-                </th>
-                <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
-                  تاریخ ایجاد
-                </th>
-                <th className="px-4 py-3.5 text-slate-400 font-medium text-center">
-                  عملیات
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user, idx) => {
-                const role = ROLE_LABELS[user.role] || ROLE_LABELS.operator;
-                const isMe = user.id === currentUser?.id;
-                return (
-                  <tr
-                    key={user.id}
-                    className={`border-b border-slate-700/30 transition-colors hover:bg-slate-700/20
+          {/* Info box */}
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl text-sm text-blue-300 flex gap-3 items-start">
+            <span className="text-lg mt-0.5">ℹ️</span>
+            <div>
+              <p className="font-semibold mb-1">راهنمای سطوح دسترسی</p>
+              <p>
+                👤 <strong>اپراتور:</strong> می‌تواند فاکتور صادر کند و مشتریان
+                را مدیریت کند
+              </p>
+              <p>
+                🔑 <strong>مدیر:</strong> دسترسی به همه بخش‌ها + مدیریت هزینه‌ها
+                و گزارشات
+              </p>
+              <p>
+                👑 <strong>مدیر ارشد:</strong> کنترل کامل شامل مدیریت کاربران و
+                تنظیمات سیستم
+              </p>
+            </div>
+          </div>
+
+          {/* Users Table */}
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <div className="w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-700/30 text-slate-400 border-b border-slate-700/50">
+                    <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
+                      کاربر
+                    </th>
+                    <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
+                      نام کاربری
+                    </th>
+                    <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
+                      سطح دسترسی
+                    </th>
+                    <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
+                      وضعیت
+                    </th>
+                    <th className="text-right px-4 py-3.5 text-slate-400 font-medium">
+                      تاریخ ایجاد
+                    </th>
+                    <th className="px-4 py-3.5 text-slate-400 font-medium text-center">
+                      عملیات
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user, idx) => {
+                    const role = ROLE_LABELS[user.role] || ROLE_LABELS.operator;
+                    const isMe = user.id === currentUser?.id;
+                    return (
+                      <tr
+                        key={user.id}
+                        className={`border-b border-slate-700/30 transition-colors hover:bg-slate-700/20
                       ${idx % 2 === 0 ? "" : "bg-slate-800/20"}`}
-                  >
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-600 to-slate-700
-                          flex items-center justify-center text-white font-bold text-sm border border-slate-600"
-                        >
-                          {(
-                            user.first_name?.[0] ||
-                            user.username[0] ||
-                            "?"
-                          ).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-white font-medium">
-                            {user.first_name || user.last_name
-                              ? `${user.first_name} ${user.last_name}`.trim()
-                              : user.username}
-                          </p>
-                          {user.email && (
-                            <p className="text-slate-500 text-xs">
-                              {user.email}
-                            </p>
-                          )}
-                        </div>
-                        {isMe && (
-                          <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] rounded-full border border-blue-500/30">
-                            شما
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <code className="text-slate-300 bg-slate-900/50 px-2 py-1 rounded-lg text-xs">
-                        {user.username}
-                      </code>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${role.color}`}
                       >
-                        <span>{role.icon}</span>
-                        {role.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <button
-                        onClick={() => !isMe && handleToggleActive(user)}
-                        disabled={isMe}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-600 to-slate-700
+                          flex items-center justify-center text-white font-bold text-sm border border-slate-600"
+                            >
+                              {(
+                                user.first_name?.[0] ||
+                                user.username[0] ||
+                                "?"
+                              ).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-white font-medium">
+                                {user.first_name || user.last_name
+                                  ? `${user.first_name} ${user.last_name}`.trim()
+                                  : user.username}
+                              </p>
+                              {user.email && (
+                                <p className="text-slate-500 text-xs">
+                                  {user.email}
+                                </p>
+                              )}
+                            </div>
+                            {isMe && (
+                              <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] rounded-full border border-blue-500/30">
+                                شما
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <code className="text-slate-300 bg-slate-900/50 px-2 py-1 rounded-lg text-xs">
+                            {user.username}
+                          </code>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${role.color}`}
+                          >
+                            <span>{role.icon}</span>
+                            {role.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <button
+                            onClick={() => !isMe && handleToggleActive(user)}
+                            disabled={isMe}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border
                           transition-all duration-200
                           ${
                             user.is_active
                               ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30"
                               : "bg-red-500/20 text-red-300 border-red-500/30 hover:bg-red-500/30"
                           } ${isMe ? "cursor-default opacity-70" : "cursor-pointer"}`}
-                        title={isMe ? "نمی‌توانید وضعیت خود را تغییر دهید" : ""}
-                      >
-                        <span>{user.is_active ? "✅" : "❌"}</span>
-                        {user.is_active ? "فعال" : "غیرفعال"}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3.5 text-slate-400 text-xs">
-                      {user.date_joined
-                        ? new Date(user.date_joined).toLocaleDateString("fa-IR")
-                        : "-"}
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <div className="flex items-center justify-center gap-2">
-                        <Link
-                          to={`/users/${user.id}/performance`}
-                          className="px-3 py-1.5 bg-slate-700/50 hover:bg-violet-500/20 text-slate-300 hover:text-violet-300
+                            title={
+                              isMe ? "نمی‌توانید وضعیت خود را تغییر دهید" : ""
+                            }
+                          >
+                            <span>{user.is_active ? "✅" : "❌"}</span>
+                            {user.is_active ? "فعال" : "غیرفعال"}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-400 text-xs">
+                          {user.date_joined
+                            ? new Date(user.date_joined).toLocaleDateString(
+                                "fa-IR",
+                              )
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center justify-center gap-2">
+                            <Link
+                              to={`/users/${user.id}/performance`}
+                              className="px-3 py-1.5 bg-slate-700/50 hover:bg-violet-500/20 text-slate-300 hover:text-violet-300
                             rounded-lg text-xs font-medium transition-all duration-200 border border-slate-600/50
                             hover:border-violet-500/30 flex items-center gap-1.5"
-                        >
-                          📊 عملکرد
-                        </Link>
-                        <button
-                          onClick={() => openEdit(user)}
-                          className="px-3 py-1.5 bg-slate-700/50 hover:bg-blue-500/20 text-slate-300 hover:text-blue-300
+                            >
+                              📊 عملکرد
+                            </Link>
+                            <button
+                              onClick={() => openEdit(user)}
+                              className="px-3 py-1.5 bg-slate-700/50 hover:bg-blue-500/20 text-slate-300 hover:text-blue-300
                             rounded-lg text-xs font-medium transition-all duration-200 border border-slate-600/50
                             hover:border-blue-500/30 flex items-center gap-1.5"
-                        >
-                          ✏️ ویرایش
-                        </button>
-                        {!isMe && (
-                          <button
-                            onClick={() => setDeleteConfirm(user)}
-                            className="px-3 py-1.5 bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-300
+                            >
+                              ✏️ ویرایش
+                            </button>
+                            {!isMe && (
+                              <button
+                                onClick={() => setDeleteConfirm(user)}
+                                className="px-3 py-1.5 bg-slate-700/50 hover:bg-red-500/20 text-slate-300 hover:text-red-300
                               rounded-lg text-xs font-medium transition-all duration-200 border border-slate-600/50
                               hover:border-red-500/30 flex items-center gap-1.5"
-                          >
-                            🗑️ حذف
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {users.length === 0 && !loading && (
-            <div className="text-center py-16 text-slate-500">
-              <p className="text-3xl mb-3">👤</p>
-              <p>هنوز کاربری تعریف نشده است</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Create/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">
-                {editingUser ? "✏️ ویرایش کاربر" : "➕ کاربر جدید"}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400
-                  hover:text-white flex items-center justify-center transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              {formError && (
-                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
-                  {formError}
+                              >
+                                🗑️ حذف
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {users.length === 0 && !loading && (
+                <div className="text-center py-16 text-slate-500">
+                  <p className="text-3xl mb-3">👤</p>
+                  <p>هنوز کاربری تعریف نشده است</p>
                 </div>
               )}
+            </div>
+          )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    نام
-                  </label>
-                  <input
-                    type="text"
-                    value={form.first_name}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, first_name: e.target.value }))
-                    }
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
-                      placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                    placeholder="نام"
-                  />
+          {/* Create/Edit Modal */}
+          {showModal && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl">
+                <div className="p-6 border-b border-slate-700 flex items-center justify-between">
+                  <h2 className="text-lg font-bold text-white">
+                    {editingUser ? "✏️ ویرایش کاربر" : "➕ کاربر جدید"}
+                  </h2>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400
+                  hover:text-white flex items-center justify-center transition-colors"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    نام خانوادگی
-                  </label>
-                  <input
-                    type="text"
-                    value={form.last_name}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, last_name: e.target.value }))
-                    }
-                    className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
-                      placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                    placeholder="نام خانوادگی"
-                  />
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  نام کاربری <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.username}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, username: e.target.value }))
-                  }
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
-                    placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="مثال: operator1"
-                  dir="ltr"
-                  required
-                  disabled={!!editingUser}
-                />
-                {editingUser && (
-                  <p className="text-slate-500 text-xs mt-1">
-                    نام کاربری قابل تغییر نیست
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  رمز عبور{" "}
-                  {!editingUser && <span className="text-red-400">*</span>}
-                  {editingUser && (
-                    <span className="text-slate-500 text-xs mr-2">
-                      (خالی = بدون تغییر)
-                    </span>
+                <form onSubmit={handleSave} className="p-6 space-y-4">
+                  {formError && (
+                    <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
+                      {formError}
+                    </div>
                   )}
-                </label>
-                <PasswordInput
-                  value={form.password}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, password: e.target.value }))
-                  }
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
-                    placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="••••••••"
-                  dir="ltr"
-                  required={!editingUser}
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  ایمیل
-                </label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, email: e.target.value }))
-                  }
-                  className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
-                    placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
-                  placeholder="email@example.com"
-                  dir="ltr"
-                />
-              </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        نام
+                      </label>
+                      <input
+                        type="text"
+                        value={form.first_name}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, first_name: e.target.value }))
+                        }
+                        className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
+                      placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                        placeholder="نام"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                        نام خانوادگی
+                      </label>
+                      <input
+                        type="text"
+                        value={form.last_name}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, last_name: e.target.value }))
+                        }
+                        className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
+                      placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                        placeholder="نام خانوادگی"
+                      />
+                    </div>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  سطح دسترسی
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {ROLE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() =>
-                        setForm((f) => ({ ...f, role: opt.value }))
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      نام کاربری <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.username}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, username: e.target.value }))
                       }
-                      className={`p-3 rounded-xl border text-xs font-medium transition-all duration-200
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
+                    placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                      placeholder="مثال: operator1"
+                      dir="ltr"
+                      required
+                      disabled={!!editingUser}
+                    />
+                    {editingUser && (
+                      <p className="text-slate-500 text-xs mt-1">
+                        نام کاربری قابل تغییر نیست
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      رمز عبور{" "}
+                      {!editingUser && <span className="text-red-400">*</span>}
+                      {editingUser && (
+                        <span className="text-slate-500 text-xs mr-2">
+                          (خالی = بدون تغییر)
+                        </span>
+                      )}
+                    </label>
+                    <PasswordInput
+                      value={form.password}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, password: e.target.value }))
+                      }
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
+                    placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                      placeholder="••••••••"
+                      dir="ltr"
+                      required={!editingUser}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      ایمیل
+                    </label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, email: e.target.value }))
+                      }
+                      className="w-full px-4 py-2.5 bg-slate-800 border border-slate-600 rounded-xl text-white
+                    placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                      placeholder="email@example.com"
+                      dir="ltr"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      سطح دسترسی
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {ROLE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() =>
+                            setForm((f) => ({ ...f, role: opt.value }))
+                          }
+                          className={`p-3 rounded-xl border text-xs font-medium transition-all duration-200
                         flex flex-col items-center gap-1 text-center
                         ${
                           form.role === opt.value
                             ? "bg-purple-500/20 border-purple-500/50 text-purple-300"
                             : "bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-500 hover:text-slate-300"
                         }`}
-                    >
-                      <span className="text-lg">{opt.icon}</span>
-                      <span>{opt.label.split(" ")[0]}</span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-slate-500 text-xs mt-2">
-                  {ROLE_OPTIONS.find((o) => o.value === form.role)?.label}
-                </p>
-              </div>
-
-              {editingUser && accessForm && (
-                <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-slate-300 text-sm font-medium">
-                      🔐 دسترسی ماژول‌ها
+                        >
+                          <span className="text-lg">{opt.icon}</span>
+                          <span>{opt.label.split(" ")[0]}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-slate-500 text-xs mt-2">
+                      {ROLE_OPTIONS.find((o) => o.value === form.role)?.label}
                     </p>
-                    {accessMode === "custom" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAccessMode("default");
-                          setAccessForm(blankAccess());
-                        }}
-                        className="text-xs text-blue-400 hover:text-blue-300"
-                      >
-                        بازنشانی به پیش‌فرض نقش
-                      </button>
-                    )}
                   </div>
-                  <p className="text-slate-500 text-xs">
-                    {accessMode === "default"
-                      ? "این کاربر از دسترسی پیش‌فرض نقش خود پیروی می‌کند؛ با برداشتن تیک هر ماژول، دسترسی اختصاصی ساخته می‌شود."
-                      : "دسترسی اختصاصی فعال است؛ ماژول‌های بدون تیک برای این کاربر بسته می‌شوند."}{" "}
-                    ماژول‌های خاکستری سقف نقش کاربرند و قابل اعطا نیستند.
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {ALL_MODULES.map((m) => {
-                      const allowed = ceilingFor(form.role).includes(m);
-                      return (
-                        <label
-                          key={m}
-                          className={`flex items-center gap-2 p-2 rounded-lg border text-xs
+
+                  {editingUser && accessForm && (
+                    <div className="p-3 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-slate-300 text-sm font-medium">
+                          🔐 دسترسی ماژول‌ها
+                        </p>
+                        {accessMode === "custom" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAccessMode("default");
+                              setAccessForm(blankAccess());
+                            }}
+                            className="text-xs text-blue-400 hover:text-blue-300"
+                          >
+                            بازنشانی به پیش‌فرض نقش
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-slate-500 text-xs">
+                        {accessMode === "default"
+                          ? "این کاربر از دسترسی پیش‌فرض نقش خود پیروی می‌کند؛ با برداشتن تیک هر ماژول، دسترسی اختصاصی ساخته می‌شود."
+                          : "دسترسی اختصاصی فعال است؛ ماژول‌های بدون تیک برای این کاربر بسته می‌شوند."}{" "}
+                        ماژول‌های خاکستری سقف نقش کاربرند و قابل اعطا نیستند.
+                      </p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {ALL_MODULES.map((m) => {
+                          const allowed = ceilingFor(form.role).includes(m);
+                          return (
+                            <label
+                              key={m}
+                              className={`flex items-center gap-2 p-2 rounded-lg border text-xs
                             ${
                               allowed
                                 ? "bg-slate-800 border-slate-600 text-slate-300 cursor-pointer"
                                 : "bg-slate-800/40 border-slate-700/50 text-slate-600 cursor-not-allowed"
                             }`}
-                        >
-                          <input
-                            type="checkbox"
-                            disabled={!allowed}
-                            checked={allowed && !!accessForm[m]}
-                            onChange={(e) => {
-                              setAccessForm(
-                                (f) =>
-                                  ({
-                                    ...f,
-                                    [m]: e.target.checked,
-                                  }) as ModuleAccessMap,
-                              );
-                              setAccessMode("custom");
-                            }}
-                            className="accent-purple-500"
-                          />
-                          {MODULE_LABELS[m]}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={!allowed}
+                                checked={allowed && !!accessForm[m]}
+                                onChange={(e) => {
+                                  setAccessForm(
+                                    (f) =>
+                                      ({
+                                        ...f,
+                                        [m]: e.target.checked,
+                                      }) as ModuleAccessMap,
+                                  );
+                                  setAccessMode("custom");
+                                }}
+                                className="accent-purple-500"
+                              />
+                              {MODULE_LABELS[m]}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
-              <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700">
-                <div>
-                  <p className="text-slate-300 text-sm font-medium">
-                    وضعیت حساب
-                  </p>
-                  <p className="text-slate-500 text-xs">
-                    کاربر غیرفعال نمی‌تواند وارد سیستم شود
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((f) => ({ ...f, is_active: !f.is_active }))
-                  }
-                  className={`w-12 h-6 rounded-full transition-all duration-300 relative
+                  <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                    <div>
+                      <p className="text-slate-300 text-sm font-medium">
+                        وضعیت حساب
+                      </p>
+                      <p className="text-slate-500 text-xs">
+                        کاربر غیرفعال نمی‌تواند وارد سیستم شود
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({ ...f, is_active: !f.is_active }))
+                      }
+                      className={`w-12 h-6 rounded-full transition-all duration-300 relative
                     ${form.is_active ? "bg-emerald-500" : "bg-slate-600"}`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300
+                    >
+                      <span
+                        className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-300
                     ${form.is_active ? "right-0.5" : "left-0.5"}`}
-                  />
-                </button>
-              </div>
+                      />
+                    </button>
+                  </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 py-2.5 bg-gradient-to-l from-purple-600 to-indigo-600
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="flex-1 py-2.5 bg-gradient-to-l from-purple-600 to-indigo-600
                     hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium text-sm
                     transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2"
-                >
-                  {saving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ذخیره...
-                    </>
-                  ) : editingUser ? (
-                    "💾 ذخیره تغییرات"
-                  ) : (
-                    "✅ ایجاد کاربر"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl
+                    >
+                      {saving ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          ذخیره...
+                        </>
+                      ) : editingUser ? (
+                        "💾 ذخیره تغییرات"
+                      ) : (
+                        "✅ ایجاد کاربر"
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowModal(false)}
+                      className="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl
                     font-medium text-sm transition-colors"
-                >
-                  انصراف
-                </button>
+                    >
+                      انصراف
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirm Modal */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-800 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
-            <div className="text-4xl mb-4">⚠️</div>
-            <h3 className="text-lg font-bold text-white mb-2">حذف کاربر</h3>
-            <p className="text-slate-400 text-sm mb-6">
-              آیا مطمئن هستید که می‌خواهید کاربر{" "}
-              <strong className="text-white">{deleteConfirm.username}</strong>{" "}
-              را حذف کنید؟ این عمل قابل بازگشت نیست.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleDelete(deleteConfirm.id)}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium text-sm transition-colors"
-              >
-                بله، حذف شود
-              </button>
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl font-medium text-sm transition-colors"
-              >
-                انصراف
-              </button>
             </div>
-          </div>
-        </div>
+          )}
+
+          {/* Delete Confirm Modal */}
+          {deleteConfirm && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-800 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm shadow-2xl text-center">
+                <div className="text-4xl mb-4">⚠️</div>
+                <h3 className="text-lg font-bold text-white mb-2">حذف کاربر</h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  آیا مطمئن هستید که می‌خواهید کاربر{" "}
+                  <strong className="text-white">
+                    {deleteConfirm.username}
+                  </strong>{" "}
+                  را حذف کنید؟ این عمل قابل بازگشت نیست.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleDelete(deleteConfirm.id)}
+                    className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium text-sm transition-colors"
+                  >
+                    بله، حذف شود
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(null)}
+                    className="flex-1 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-xl font-medium text-sm transition-colors"
+                  >
+                    انصراف
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

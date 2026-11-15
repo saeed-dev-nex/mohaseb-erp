@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   businessesAPI,
   type Business,
@@ -21,17 +22,10 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: "مشاهده‌گر",
 };
 
-type Member = {
-  id: number;
-  username: string;
-  role: string;
-  is_default: boolean;
-};
-
 /**
  * Businesses admin (ERP phase 0): the multi-business core. Lists the
  * businesses the superuser runs, creates new ones from a job template
- * (قالب شغلی), and manages each business's fiscal years and members.
+ * (قالب شغلی), and manages each business's fiscal years (members live on the Users page).
  */
 export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
   const { refresh: refreshProvider, switchTo } = useBusiness();
@@ -39,7 +33,6 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
   const [templates, setTemplates] = useState<BusinessTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [years, setYears] = useState<FiscalYear[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -55,10 +48,6 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
     start_date: "",
     end_date: "",
     is_current: true,
-  });
-  const [memberForm, setMemberForm] = useState({
-    username: "",
-    role: "operator",
   });
   const [catalogMsg, setCatalogMsg] = useState("");
 
@@ -81,22 +70,6 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
   }, [loadBusinesses]);
 
   const selected = businesses.find((b) => b.id === selectedId) ?? null;
-
-  // The member role must belong to the selected business's trade:
-  // when the business changes, fall back to its everyday role
-  // (فروشنده for shops, اپراتور for service trades).
-  useEffect(() => {
-    if (!selected) return;
-    const presets = selected.role_presets ?? [];
-    const allowed = ["owner", ...presets.map((p) => p.key)];
-    if (!allowed.includes(memberForm.role)) {
-      const everyday =
-        presets.find((p) => p.key === "seller" || p.key === "operator") ??
-        presets[0];
-      if (everyday) setMemberForm((f) => ({ ...f, role: everyday.key }));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, businesses]);
 
   const [identityForm, setIdentityForm] = useState({
     name: "",
@@ -145,17 +118,12 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
   useEffect(() => {
     if (!selected) {
       setYears([]);
-      setMembers([]);
       return;
     }
     businessesAPI
       .fiscalYears(selected.id)
       .then(({ data }) => setYears(data))
       .catch(() => setYears([]));
-    businessesAPI
-      .members(selected.id)
-      .then(({ data }) => setMembers(data as Member[]))
-      .catch(() => setMembers([]));
   }, [selected]);
 
   if (!isSuperuser) return null;
@@ -206,21 +174,6 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
     } catch {
       setError(
         "افزودن سال مالی انجام نشد. عنوان تکراری یا تاریخ‌ها را بررسی کنید.",
-      );
-    }
-  };
-
-  const addMember = async () => {
-    if (!selected) return;
-    setError("");
-    try {
-      await businessesAPI.addMember(selected.id, memberForm);
-      const { data } = await businessesAPI.members(selected.id);
-      setMembers(data as Member[]);
-      setMemberForm({ username: "", role: "operator" });
-    } catch {
-      setError(
-        "افزودن عضو انجام نشد. نام کاربری باید دقیقاً نام یک کاربر موجود باشد.",
       );
     }
   };
@@ -623,70 +576,18 @@ export const BusinessesTab = ({ isSuperuser }: { isSuperuser: boolean }) => {
             </div>
           </Section>
 
-          <Section title={`اعضا — ${selected.name}`} icon="👥">
-            <div className="space-y-2 mb-4">
-              {members.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between bg-slate-700/30 rounded-xl px-4 py-2.5 text-sm"
-                >
-                  <span className="text-white">{member.username}</span>
-                  <span className="text-slate-400 text-xs">
-                    {ROLE_LABELS[member.role] ?? member.role}
-                    {member.is_default && " · پیش‌فرض او"}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <F label="نام کاربری">
-                <input
-                  className={inp}
-                  value={memberForm.username}
-                  onChange={(e) =>
-                    setMemberForm({ ...memberForm, username: e.target.value })
-                  }
-                />
-              </F>
-              <F label="نقش در این کسب‌وکار">
-                <select
-                  className={inp}
-                  value={memberForm.role}
-                  onChange={(e) =>
-                    setMemberForm({ ...memberForm, role: e.target.value })
-                  }
-                >
-                  <option value="owner">مالک</option>
-                  {(selected?.role_presets ?? []).map((preset) => (
-                    <option key={preset.key} value={preset.key}>
-                      {preset.label}
-                    </option>
-                  ))}
-                  {!selected?.role_presets?.length && (
-                    <>
-                      <option value="manager">مدیر</option>
-                      <option value="operator">اپراتور</option>
-                      <option value="viewer">مشاهده‌گر</option>
-                    </>
-                  )}
-                </select>
-                <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                  نقش‌ها بر اساس نوع شغل این کسب‌وکارند؛ هر نقش فقط به بخش‌های
-                  مربوط به مسئولیت خودش دسترسی دارد (مثلاً فروشنده حسابداری را
-                  نمی‌بیند و حسابدار به انبار دسترسی ندارد)، ولی ثبت‌های خودکار
-                  پس‌زمینه (سند فروش و خروج انبار) همیشه انجام می‌شود.
-                </p>
-              </F>
-              <div className="flex items-end">
-                <button
-                  onClick={addMember}
-                  disabled={!memberForm.username.trim()}
-                  className="px-4 py-2.5 bg-slate-600 hover:bg-slate-500 disabled:opacity-40 text-white text-sm rounded-xl transition-all w-full"
-                >
-                  افزودن / به‌روزرسانی عضو
-                </button>
-              </div>
-            </div>
+          <Section title="اعضا و نقش‌ها" icon="👥">
+            <p className="text-slate-400 text-sm leading-7">
+              مدیریت اعضای این کسب‌وکار به صفحهٔ «مدیریت کاربران» منتقل شده است؛
+              نقش‌های هر شغل (فروشنده، انباردار، حسابدار، اپراتور و…) و دسترسی
+              هر نقش همان‌جا دیده و ویرایش می‌شود.
+            </p>
+            <Link
+              to="/users"
+              className="inline-block mt-3 px-4 py-2.5 bg-slate-600 hover:bg-slate-500 text-white text-sm rounded-xl transition-all"
+            >
+              رفتن به مدیریت کاربران
+            </Link>
           </Section>
         </>
       )}

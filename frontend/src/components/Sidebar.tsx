@@ -159,10 +159,18 @@ const Sidebar = ({
     };
   }, [isManager]);
 
+  // The users page belongs to the superuser and to the current
+  // business's owner/manager (its members live there now).
+  const canManageUsers = Boolean(
+    isAdmin ||
+    currentBusiness?.my_role === "owner" ||
+    currentBusiness?.my_role === "manager",
+  );
+
   const systemGroup: NavGroup = {
     label: "سیستم",
     items: [
-      ...(isAdmin
+      ...(canManageUsers
         ? [
             {
               to: "/users",
@@ -198,16 +206,24 @@ const Sidebar = ({
     .map((group) => ({
       ...group,
       items: group.items
-        .filter((item) => hasModule(currentUser, item.module))
+        .filter((item) =>
+          item.to === "/users"
+            ? canManageUsers
+            : hasModule(currentUser, item.module),
+        )
         .filter(
           (item) =>
+            item.to === "/users" ||
             !item.module ||
             !businessModules ||
             businessModules.includes(item.module),
         )
         .filter(
           (item) =>
-            !item.module || !myModules || myModules.includes(item.module),
+            item.to === "/users" ||
+            !item.module ||
+            !myModules ||
+            myModules.includes(item.module),
         )
         .map((item) => {
           // Speak the trade's words where the template defines them.

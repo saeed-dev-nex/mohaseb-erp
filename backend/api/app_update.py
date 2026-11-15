@@ -156,17 +156,21 @@ def parse_changelog_sections(text):
 
 
 def changes_since(changelog_text, current_version):
-    """Sections newer than ``current_version`` (Unreleased counts as newest)."""
+    """The LATEST update's notes only: the first changelog section
+    that is newer than ``current_version`` (Unreleased counts as
+    newest). Older sections — including history inherited from
+    another product — are never part of an update's notes.
+    """
     current_tuple = _version_tuple(current_version)
-    newer = []
     for section in parse_changelog_sections(changelog_text):
         if section['version'].lower() == 'unreleased':
-            newer.append(section)
-            continue
+            return [section]
         section_tuple = _version_tuple(section['version'])
-        if section_tuple is not None and (current_tuple is None or section_tuple > current_tuple):
-            newer.append(section)
-    return newer
+        if section_tuple is not None and (
+            current_tuple is None or section_tuple > current_tuple
+        ):
+            return [section]
+    return []
 
 
 def _cache_path():
@@ -195,16 +199,49 @@ def _write_cache(status):
         logger.exception('Could not write the update status cache')
 
 
+def _live_head_sha():
+    """The checkout's current HEAD (local git, no network)."""
+    try:
+        return _run_git(['rev-parse', 'HEAD'])[:12]
+    except Exception:
+        return ''
+
+
+def _cache_is_stale(data):
+    """A cached status describes the code it was computed for: once
+    HEAD moves (an update was applied), the cache must not keep
+    announcing that same update — the phantom «update available»
+    banner after a successful update came from exactly this.
+    """
+    cached_sha = (data or {}).get('current_sha') or ''
+    if not cached_sha:
+        return False
+    live = _live_head_sha()
+    return bool(live) and live != cached_sha
+
+
+def _is_git_checkout(root):
+    return (root / '.git').exists()
+
+
+DOCKER_UPDATE_REASON = (
+    'این نصب داخل داکر اجرا می‌شود و به‌روزرسانی از داخل برنامه ممکن نیست؛ '
+    'روی سیستم میزبان، اسکریپت update_docker (در پوشهٔ برنامه) را اجرا کنید '
+    'تا نسخهٔ تازه دریافت و سرویس‌ها به‌صورت خودکار بازسازی و راه‌اندازی شوند.'
+)
+
+
 def get_update_status(force=False):
     """Current vs remote version state; cached unless ``force``."""
     if not force:
         cached = _read_cache()
-        if cached is not None:
+        if cached is not None and not _cache_is_stale(cached):
             return cached
     root = repo_root()
     status = {
         'available': False,
         'reason': '',
+        'environment': 'git' if _is_git_checkout(root) else 'docker',
         'current_version': _read_version(root),
         'branch': '',
         'current_sha': '',
@@ -215,6 +252,10 @@ def get_update_status(force=False):
         'checked_at': datetime.now(dt_timezone.utc).isoformat(),
         'approved_pending': (root / FLAG_FILENAME).exists(),
     }
+    if status['environment'] == 'docker':
+        status['reason'] = DOCKER_UPDATE_REASON
+        _write_cache(status)
+        return status
     try:
         status['branch'] = _run_git(['rev-parse', '--abbrev-ref', 'HEAD'])
         status['current_sha'] = _run_git(['rev-parse', 'HEAD'])[:12]
@@ -237,12 +278,13 @@ def get_update_status(force=False):
 def quick_update_status():
     """Cache-only status for cheap polling (never touches the network)."""
     cached = _read_cache()
-    if cached is not None:
+    if cached is not None and not _cache_is_stale(cached):
         return cached
     root = repo_root()
     return {
         'available': False,
         'reason': 'هنوز بررسی نشده است.',
+        'environment': 'git' if _is_git_checkout(root) else 'docker',
         'current_version': _read_version(root),
         'branch': '',
         'current_sha': '',
@@ -265,6 +307,8 @@ def approve_update(requested_by=''):
     Returns (ok, detail_dict).
     """
     status = get_update_status(force=True)
+    if status.get('environment') == 'docker':
+        return False, {'detail': DOCKER_UPDATE_REASON}
     if not status['available']:
         return False, {'detail': status['reason'] or 'بررسی آپدیت انجام نشد.'}
     if status['behind'] <= 0:

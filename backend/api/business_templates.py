@@ -376,31 +376,31 @@ _ALL = None  # sentinel: every module the business itself has
 
 ROLE_PRESETS = {
     'product': [
-        {'key': 'manager', 'label': 'مدیر', 'modules': _ALL},
-        {'key': 'accountant', 'label': 'حسابدار', 'modules': [
+        {'key': 'manager', 'label': 'مدیر', 'description': 'به همهٔ بخش‌های این کسب‌وکار دسترسی دارد و اعضا و تنظیمات آن را مدیریت می‌کند.', 'modules': _ALL},
+        {'key': 'accountant', 'label': 'حسابدار', 'description': 'سندها و حسابداری، مالیات، چک‌ها، هزینه‌ها و گزارش‌های مالی؛ موجودی انبار و تنظیمات را نمی‌بیند.', 'modules': [
             'invoices', 'customers', 'accounting', 'tax', 'reports',
             'cheques', 'expenses',
         ]},
-        {'key': 'warehouse', 'label': 'انباردار', 'modules': [
+        {'key': 'warehouse', 'label': 'انباردار', 'description': 'کالاها، خریدها، موجودی و گردش انبار؛ فاکتور فروش صادر نمی‌کند و حسابداری را نمی‌بیند.', 'modules': [
             'inventory', 'services', 'customers',
         ]},
-        {'key': 'seller', 'label': 'فروشنده', 'modules': [
+        {'key': 'seller', 'label': 'فروشنده', 'description': 'فاکتور فروش، مشتری‌ها و چک‌ها؛ حسابداری و موجودی انبار را نمی‌بیند، ولی فروش‌هایش خودکار در انبار و حسابداری ثبت می‌شود.', 'modules': [
             'invoices', 'customers', 'services', 'cheques',
         ]},
-        {'key': 'viewer', 'label': 'مشاهده‌گر', 'modules': [
+        {'key': 'viewer', 'label': 'مشاهده‌گر', 'description': 'فقط مشاهدهٔ فاکتورها، مشتری‌ها و گزارش‌ها؛ هیچ تغییری نمی‌تواند بدهد.', 'modules': [
             'invoices', 'customers', 'reports',
         ]},
     ],
     'service': [
-        {'key': 'manager', 'label': 'مدیر', 'modules': _ALL},
-        {'key': 'accountant', 'label': 'حسابدار', 'modules': [
+        {'key': 'manager', 'label': 'مدیر', 'description': 'به همهٔ بخش‌های این کسب‌وکار دسترسی دارد و اعضا و تنظیمات آن را مدیریت می‌کند.', 'modules': _ALL},
+        {'key': 'accountant', 'label': 'حسابدار', 'description': 'سندها و حسابداری، مالیات، چک‌ها، هزینه‌ها و گزارش‌های مالی؛ خدمات و تنظیمات را مدیریت نمی‌کند.', 'modules': [
             'invoices', 'customers', 'accounting', 'tax', 'reports',
             'cheques', 'expenses',
         ]},
-        {'key': 'operator', 'label': 'اپراتور', 'modules': [
+        {'key': 'operator', 'label': 'اپراتور', 'description': 'ثبت سفارش و فاکتور مراجعان، مشتری‌ها، خدمات و چک‌ها؛ حسابداری و گزارش‌های مالی را نمی‌بیند، ولی ثبت‌هایش خودکار سند حسابداری می‌خورد.', 'modules': [
             'invoices', 'customers', 'services', 'cheques',
         ]},
-        {'key': 'viewer', 'label': 'مشاهده‌گر', 'modules': [
+        {'key': 'viewer', 'label': 'مشاهده‌گر', 'description': 'فقط مشاهدهٔ فاکتورها، مشتری‌ها و گزارش‌ها؛ هیچ تغییری نمی‌تواند بدهد.', 'modules': [
             'invoices', 'customers', 'reports',
         ]},
     ],

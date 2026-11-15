@@ -3,9 +3,12 @@ import { Link } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { appUpdateAPI } from "../services/api";
 
-/** Slim banner for the superuser when an approved-pending style
- * update is waiting: the new version exists, its changes are one
- * click away in Settings, and nothing installs without approval. */
+/** Slim banner for the superuser when a new version is waiting.
+ * It checks on its own — once when the app opens and then every
+ * 30 minutes with a fresh server check — so the notification shows
+ * up when an update is RELEASED, not after one was installed. A
+ * dismissed release (by its commit) stays dismissed, and an update
+ * that was already approved no longer nags here. */
 const UpdateBanner = () => {
   const user = useSelector((state: any) => state.auth.currentUser);
   const isSuperuser = Boolean(user?.is_superuser);
@@ -17,28 +20,51 @@ const UpdateBanner = () => {
   useEffect(() => {
     if (!isSuperuser) return undefined;
     let active = true;
-    appUpdateAPI
-      .status(true)
-      .then(({ data }) => {
-        if (!active || !data?.available || !(data.behind > 0)) return;
-        try {
-          const dismissed = window.localStorage.getItem(
-            "mohaseb:update-dismissed",
-          );
-          if (dismissed === data.remote_sha) return;
-        } catch {
-          /* Storage unavailable; still show the banner. */
+
+    const evaluate = (data: any) => {
+      if (!active) return;
+      if (!data?.available || !(data.behind > 0) || data.approved_pending) {
+        setInfo(null);
+        return;
+      }
+      try {
+        const dismissed = window.localStorage.getItem(
+          "mohaseb:update-dismissed",
+        );
+        if (dismissed === data.remote_sha) {
+          setInfo(null);
+          return;
         }
-        setInfo({
-          latest: data.latest_version || "",
-          sha: data.remote_sha || "",
-        });
-      })
+      } catch {
+        /* Storage unavailable; still show the banner. */
+      }
+      setInfo({
+        latest: data.latest_version || "",
+        sha: data.remote_sha || "",
+      });
+    };
+
+    // On open: the cached-or-fresh status (the backend fetches when
+    // its cache is stale). Then poll with a FORCED check so a newly
+    // released update appears by itself.
+    appUpdateAPI
+      .status()
+      .then(({ data }) => evaluate(data))
       .catch(() => {
         /* The banner is a convenience; Settings does the real check. */
       });
+    const timer = window.setInterval(
+      () => {
+        appUpdateAPI
+          .check()
+          .then(({ data }) => evaluate(data))
+          .catch(() => {});
+      },
+      30 * 60 * 1000,
+    );
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
   }, [isSuperuser]);
 
@@ -65,7 +91,7 @@ const UpdateBanner = () => {
     <div className="mx-6 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-2.5 text-sm text-amber-900 shadow-sm">
       <span aria-hidden="true">⬆️</span>
       <p className="min-w-0 flex-1">
-        نسخهٔ جدید محاسب پرو
+        نسخهٔ جدید برنامه
         {info.latest ? ` (${info.latest})` : ""} آمادهٔ نصب است. تغییراتش را
         ببینید و هر وقت سامانه خلوت بود نصبش کنید.
       </p>

@@ -466,6 +466,24 @@ const Settings = () => {
               {/* Branding */}
               <Section title="برند و لوگو" icon="🎨">
                 <div className="space-y-4">
+                  <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-3">
+                    <F label="💱 واحد پول (نمایش و ورود مبالغ)">
+                      <select
+                        className={inp}
+                        value={form.currency_unit}
+                        onChange={(e) => set("currency_unit", e.target.value)}
+                      >
+                        <option value="toman">تومان</option>
+                        <option value="rial">ریال</option>
+                      </select>
+                      <p className="mt-1 text-[11px] leading-5 text-slate-400">
+                        مبالغ در پایگاه داده به تومان ذخیره می‌شوند؛ با انتخاب
+                        «ریال»، نمایش و ورود مبالغ در کل برنامه به ریال (×۱۰)
+                        انجام می‌شود و مقدار ذخیره‌شده تغییری نمی‌کند. بعد از
+                        تغییر، «ذخیره» را بزنید.
+                      </p>
+                    </F>
+                  </div>
                   <div className="flex items-center gap-4">
                     <div className="w-20 h-20 rounded-2xl bg-slate-700/50 border-2 border-dashed border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
                       {logoPreview ? (
@@ -515,21 +533,6 @@ const Settings = () => {
                       onChange={(e) => set("tax_id", e.target.value)}
                       placeholder="شناسه مالیاتی (اختیاری)"
                     />
-                  </F>
-                  <F label="واحد پول">
-                    <select
-                      className={inp}
-                      value={form.currency_unit}
-                      onChange={(e) => set("currency_unit", e.target.value)}
-                    >
-                      <option value="toman">تومان</option>
-                      <option value="rial">ریال</option>
-                    </select>
-                    <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                      مبالغ در پایگاه داده به تومان ذخیره می‌شوند؛ با انتخاب
-                      «ریال»، نمایش و ورود مبالغ در کل برنامه به ریال (×۱۰)
-                      انجام می‌شود و مقدار ذخیره‌شده تغییری نمی‌کند.
-                    </p>
                   </F>
                 </div>
               </Section>
